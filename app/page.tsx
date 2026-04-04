@@ -305,12 +305,12 @@ export default function Home() {
                   >
                     Upload Lagi
                   </button>
-                  <button
+                  {/* <button
                     onClick={handlePrint}
                     className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors shadow-md"
                   >
                     Print
-                  </button>
+                  </button> */}
                   <button
                     onClick={handleExportPDF}
                     disabled={isExporting}
