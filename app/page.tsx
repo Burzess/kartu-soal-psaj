@@ -5,6 +5,7 @@ import FileUpload from '@/components/FileUpload';
 import KisiKisiUpload from '@/components/KisiKisiUpload';
 import KartuSoal from '@/components/KartuSoal';
 import KartuSoalEssay from '@/components/KartuSoalEssay';
+import KunciJawaban from '@/components/KunciJawaban';
 import { ParseResult } from '@/lib/parser';
 import { KisiKisiData, KisiKisiItem } from '@/lib/kisi-parser';
 import jsPDF from 'jspdf';
@@ -13,6 +14,7 @@ import html2canvas from 'html2canvas';
 export default function Home() {
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [kisiKisiData, setKisiKisiData] = useState<KisiKisiData | null>(null);
+  const [showKunciJawaban, setShowKunciJawaban] = useState(false);
   const [metadata, setMetadata] = useState({
     namaSekolah: 'SMK 45 Surabaya',
     mataPelajaran: '',
@@ -38,17 +40,31 @@ export default function Home() {
     const pdf = new jsPDF('l', 'mm', 'a4');
     const pageWidth = 297;  // A4 landscape width
     const pageHeight = 210; // A4 landscape height
-    const margin = 8;
-    const usableWidth = pageWidth - margin * 2;
-    const usableHeight = pageHeight - margin * 2;
+    const horizontalMargin = 10;
+    const topMargin = 10;
+    const bottomMargin = 14;
+    const usableWidth = pageWidth - horizontalMargin * 2;
+    const usableHeight = pageHeight - topMargin - bottomMargin;
     const cards = document.querySelectorAll('.kartu-soal-card');
 
     for (let i = 0; i < cards.length; i++) {
       const card = cards[i] as HTMLElement;
+      let isolatedCard: HTMLElement | null = null;
 
       try {
+        // Capture an isolated clone so parent spacing (e.g. space-y margins)
+        // does not shift card position in the exported page.
+        isolatedCard = card.cloneNode(true) as HTMLElement;
+        isolatedCard.style.position = 'fixed';
+        isolatedCard.style.left = '-10000px';
+        isolatedCard.style.top = '0';
+        isolatedCard.style.margin = '0';
+        isolatedCard.style.width = `${card.offsetWidth}px`;
+        isolatedCard.style.zIndex = '-1';
+        document.body.appendChild(isolatedCard);
+
         // One card -> one PDF page is more stable than slicing large canvases.
-        const canvas = await html2canvas(card, {
+        const canvas = await html2canvas(isolatedCard, {
           scale: 1.5,
           useCORS: true,
           logging: false,
@@ -67,10 +83,12 @@ export default function Home() {
         const heightRatio = usableHeight / canvas.height;
         const ratio = Math.min(widthRatio, heightRatio);
 
-        const renderWidth = canvas.width * ratio;
-        const renderHeight = canvas.height * ratio;
-        const offsetX = margin + (usableWidth - renderWidth) / 2;
-        const offsetY = margin + (usableHeight - renderHeight) / 2;
+        // Keep additional breathing room so content is not too close to page edge.
+        const safeRatio = ratio * 0.96;
+        const renderWidth = canvas.width * safeRatio;
+        const renderHeight = canvas.height * safeRatio;
+        const offsetX = horizontalMargin + (usableWidth - renderWidth) / 2;
+        const offsetY = topMargin;
 
         // Convert canvas to data URL first to avoid issues
         const imgData = canvas.toDataURL('image/jpeg', 0.95);
@@ -90,6 +108,10 @@ export default function Home() {
         });
         // Skip this card and continue with others instead of failing entirely
         continue;
+      } finally {
+        if (isolatedCard && isolatedCard.parentNode) {
+          isolatedCard.parentNode.removeChild(isolatedCard);
+        }
       }
     }
 
@@ -196,12 +218,92 @@ export default function Home() {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
+  const handleExportKunciJawaban = async () => {
+    if (!parseResult || parseResult.questions.length === 0) return;
+
+    setIsExporting(true);
+    
+    try {
+      // Legal paper size: 215.9mm x 355.6mm (8.5" x 14")
+      const pdf = new jsPDF('p', 'mm', 'legal');
+      const pageWidth = 215.9;
+      const pageHeight = 355.6;
+      const margin = 10;
+      const usableWidth = pageWidth - margin * 2;
+      const usableHeight = pageHeight - margin * 2;
+      
+      const kunciElement = document.querySelector('.kunci-jawaban-container');
+      if (!kunciElement) {
+        throw new Error('Elemen kunci jawaban tidak ditemukan');
+      }
+
+      const canvas = await html2canvas(kunciElement as HTMLElement, {
+        scale: 3,  // Increased for better quality
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        allowTaint: true,
+      });
+
+      // Calculate dimensions - fit width to page, allow multiple pages for height
+      const imgWidth = usableWidth;
+      const imgHeight = (canvas.height * usableWidth) / canvas.width;
+      
+      // Calculate how many pages needed
+      const totalPages = Math.ceil(imgHeight / usableHeight);
+      
+      // Height of content per page in canvas pixels
+      const pageCanvasHeight = (usableHeight / imgWidth) * canvas.width;
+      
+      for (let page = 0; page < totalPages; page++) {
+        if (page > 0) {
+          pdf.addPage();
+        }
+        
+        // Create a temporary canvas for this page slice
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = Math.min(pageCanvasHeight, canvas.height - page * pageCanvasHeight);
+        
+        const ctx = pageCanvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+          
+          // Draw the portion of the main canvas for this page
+          ctx.drawImage(
+            canvas,
+            0, page * pageCanvasHeight,  // Source x, y
+            canvas.width, pageCanvas.height,  // Source width, height
+            0, 0,  // Dest x, y
+            pageCanvas.width, pageCanvas.height  // Dest width, height
+          );
+        }
+        
+        const pageImgData = pageCanvas.toDataURL('image/jpeg', 0.95);
+        const pageImgHeight = (pageCanvas.height * usableWidth) / pageCanvas.width;
+        
+        pdf.addImage(pageImgData, 'JPEG', margin, margin, imgWidth, pageImgHeight);
+      }
+
+      const safeSubject = (metadata.mataPelajaran || 'PSAJ')
+        .replace(/[^a-zA-Z0-9-_ ]/g, '_')
+        .trim()
+        .replace(/\s+/g, '_');
+      const fileName = `Kunci_Jawaban_${safeSubject}_${new Date().getTime()}.pdf`;
+
+      pdf.save(fileName);
+    } catch (error) {
+      console.error('[DEBUG][PDF] Gagal export kunci jawaban', error);
+      alert('Gagal membuat PDF kunci jawaban.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleReset = () => {
     setParseResult(null);
+    setShowKunciJawaban(false);
   };
 
   return (
@@ -325,6 +427,21 @@ export default function Home() {
                   >
                     Preview PDF
                   </button>
+                  <button
+                    onClick={() => setShowKunciJawaban(!showKunciJawaban)}
+                    className="px-6 py-3 bg-amber-600 text-white font-semibold rounded-lg hover:bg-amber-700 transition-colors shadow-md"
+                  >
+                    {showKunciJawaban ? 'Kartu Soal' : 'Kunci Jawaban'}
+                  </button>
+                  {showKunciJawaban && (
+                    <button
+                      onClick={handleExportKunciJawaban}
+                      disabled={isExporting}
+                      className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-md"
+                    >
+                      Export Kunci Jawaban
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -339,28 +456,39 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Preview Kartu Soal */}
-            <div className="space-y-6">
-              {parseResult.questions.map((question, index) => (
-                <div key={index} className="kartu-soal-card">
-                  {question.type === 'URAIAN' ? (
-                    <KartuSoalEssay 
-                      question={question} 
-                      metadata={metadata} 
-                      images={parseResult.images}
-                      kisiKisi={getKisiKisi(question.number)}
-                    />
-                  ) : (
-                    <KartuSoal 
-                      question={question} 
-                      metadata={metadata} 
-                      images={parseResult.images}
-                      kisiKisi={getKisiKisi(question.number)}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
+            {/* Preview Kunci Jawaban atau Kartu Soal */}
+            {showKunciJawaban ? (
+              <div className="kunci-jawaban-container">
+                <KunciJawaban 
+                  questions={parseResult.questions} 
+                  metadata={metadata}
+                  skorPerSoal={1.5}
+                  images={parseResult.images}
+                />
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {parseResult.questions.map((question, index) => (
+                  <div key={index} className="kartu-soal-card">
+                    {question.type === 'URAIAN' ? (
+                      <KartuSoalEssay 
+                        question={question} 
+                        metadata={metadata} 
+                        images={parseResult.images}
+                        kisiKisi={getKisiKisi(question.number)}
+                      />
+                    ) : (
+                      <KartuSoal 
+                        question={question} 
+                        metadata={metadata} 
+                        images={parseResult.images}
+                        kisiKisi={getKisiKisi(question.number)}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

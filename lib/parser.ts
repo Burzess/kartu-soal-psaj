@@ -109,13 +109,14 @@ export function parseTextToQuestions(text: string): ParseResult {
       }
 
       // Numbered lines inside question body (e.g. image captions / list points)
-      // should be treated as continuation text, not as a new question.
+      // should be treated as continuation text with preserved line break
       if (currentQuestion && currentState === 'question') {
-        currentQuestion.text = `${currentQuestion.text || ''} ${line}`.trim();
+        // Preserve as new line for numbered/lettered list items
+        currentQuestion.text = `${currentQuestion.text || ''}\n${line}`.trim();
       } else if (currentQuestion && currentQuestion.options && currentState === 'options' && !isUraianMode) {
         const lastOption = findLastOption(currentQuestion.options);
         if (lastOption) {
-          currentQuestion.options[lastOption] += ' ' + line;
+          currentQuestion.options[lastOption] += '\n' + line;
         }
       }
       continue;
@@ -123,7 +124,11 @@ export function parseTextToQuestions(text: string): ParseResult {
     
     // For URAIAN, only collect text and answer
     if (isUraianMode && currentQuestion) {
-      // Detect answer key
+      // Detect answer key - multiple formats
+      // Format 1: ANS: jawaban / ANSWER: jawaban
+      // Format 2: JAWABAN: teks / KUNCI: teks
+      // Format 3: PEMBAHASAN: teks
+      // Format 4: ANS (on its own line, answer on next line)
       const answerMatch = line.match(/^(ANS|ANSWER|JAWABAN|KUNCI|PEMBAHASAN)\s*[:.-]?\s*(.*)$/i);
       if (answerMatch) {
         const firstAnswerLine = answerMatch[2].trim();
@@ -134,15 +139,39 @@ export function parseTextToQuestions(text: string): ParseResult {
         continue;
       }
       
+      // Also detect PTS pattern which indicates end of answer
+      if (line.match(/^PTS\s*[:.-]?\s*\d+/i)) {
+        // Points line - save current question and prepare for next
+        continue;
+      }
+      
       // Continue question text
       if (currentState === 'question') {
-        if (!line.match(/^(ANS|ANSWER|JAWABAN|KUNCI|PEMBAHASAN)/i)) {
-          currentQuestion.text += ' ' + line;
+        // Don't add lines that look like answer markers
+        if (!line.match(/^(ANS|ANSWER|JAWABAN|KUNCI|PEMBAHASAN|PTS)/i)) {
+          // Check if line is a point/list item (1., 2., a., b., 1), a), etc.)
+          const isPointLine = line.match(/^\s*(\d+|[a-zA-Z])[.)]\s+.+/);
+          if (isPointLine) {
+            // Preserve as new line for readability
+            currentQuestion.text = (currentQuestion.text || '') + '\n' + line.trim();
+          } else {
+            currentQuestion.text = (currentQuestion.text || '') + ' ' + line;
+          }
+          currentQuestion.text = currentQuestion.text.trim();
         }
       } else if (currentState === 'answer') {
-        currentQuestion.answer = currentQuestion.answer
-          ? `${currentQuestion.answer}\n${line}`
-          : line;
+        // Don't add lines that look like new questions or markers
+        if (!line.match(/^\d+[.)]\s+/) && !line.match(/^(PTS|ESSAY|URAIAN|SHORT ANSWER)/i)) {
+          // Check if line is a point/list item
+          const isPointLine = line.match(/^\s*(\d+|[a-zA-Z])[.)]\s+.+/);
+          if (isPointLine || currentQuestion.answer) {
+            currentQuestion.answer = currentQuestion.answer
+              ? `${currentQuestion.answer}\n${line}`
+              : line;
+          } else {
+            currentQuestion.answer = line;
+          }
+        }
       }
       continue;
     }

@@ -18,68 +18,97 @@ interface KartuSoalProps {
   kisiKisi?: KisiKisiItem;
 }
 
-// Helper to render text with image placeholders
+// Helper to render text with image placeholders and preserve line breaks/lists
 function renderTextWithImages(text: string, images?: ExtractedImage[]): React.ReactNode {
-  // Check for [IMG_X] markers (extracted images) and [GAMBAR] (placeholder)
-  const imgPattern = /\[(IMG_\d+)\]|\[GAMBAR\]/g;
+  // First, split by newlines to preserve formatting
+  const lines = text.split('\n');
   
-  if (!imgPattern.test(text)) {
-    return <span>{text}</span>;
-  }
-  
-  // Reset regex
-  imgPattern.lastIndex = 0;
-  
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match;
-  
-  while ((match = imgPattern.exec(text)) !== null) {
-    // Add text before the match
-    if (match.index > lastIndex) {
-      parts.push(text.substring(lastIndex, match.index));
+  const renderLine = (line: string, lineIndex: number): React.ReactNode => {
+    // Check for [IMG_X] markers (extracted images) and [GAMBAR] (placeholder)
+    const imgPattern = /\[(IMG_\d+)\]|\[GAMBAR\]/g;
+    
+    if (!imgPattern.test(line)) {
+      return line;
     }
     
-    const imgId = match[1]; // IMG_1, IMG_2, etc.
+    // Reset regex
+    imgPattern.lastIndex = 0;
     
-    if (imgId && images) {
-      // Find the actual image
-      const img = images.find(i => i.id === imgId);
-      if (img && (img.format === 'png' || img.format === 'jpeg')) {
-        parts.push(
-          <img 
-            key={`${imgId}-${match.index}`}
-            src={img.data} 
-            alt={`Gambar ${imgId}`}
-            className="inline-block max-w-full max-h-32 my-1 border border-gray-300 rounded"
-          />
-        );
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = imgPattern.exec(line)) !== null) {
+      // Add text before the match
+      if (match.index > lastIndex) {
+        parts.push(line.substring(lastIndex, match.index));
+      }
+      
+      const imgId = match[1]; // IMG_1, IMG_2, etc.
+      
+      if (imgId && images) {
+        // Find the actual image
+        const img = images.find(i => i.id === imgId);
+        if (img && (img.format === 'png' || img.format === 'jpeg')) {
+          parts.push(
+            <img 
+              key={`${imgId}-${match.index}-${lineIndex}`}
+              src={img.data} 
+              alt={`Gambar ${imgId}`}
+              className="inline-block max-w-full max-h-32 my-1 border border-gray-300 rounded"
+            />
+          );
+        } else {
+          // WMF/EMF or unknown format - show placeholder
+          parts.push(
+            <span key={`${imgId}-${match.index}-${lineIndex}`} className="inline-block bg-gray-200 border border-dashed border-gray-400 px-2 py-1 mx-1 text-gray-600 text-[10px] rounded">
+              📷 Gambar (format tidak didukung)
+            </span>
+          );
+        }
       } else {
-        // WMF/EMF or unknown format - show placeholder
+        // Generic [GAMBAR] placeholder
         parts.push(
-          <span key={`${imgId}-${match.index}`} className="inline-block bg-gray-200 border border-dashed border-gray-400 px-2 py-1 mx-1 text-gray-600 text-[10px] rounded">
-            📷 Gambar (format tidak didukung)
+          <span key={`gambar-${match.index}-${lineIndex}`} className="inline-block bg-gray-200 border border-dashed border-gray-400 px-2 py-1 mx-1 text-gray-600 text-[10px] rounded">
+            📷 Gambar
           </span>
         );
       }
-    } else {
-      // Generic [GAMBAR] placeholder
-      parts.push(
-        <span key={`gambar-${match.index}`} className="inline-block bg-gray-200 border border-dashed border-gray-400 px-2 py-1 mx-1 text-gray-600 text-[10px] rounded">
-          📷 Gambar
-        </span>
-      );
+      
+      lastIndex = match.index + match[0].length;
     }
     
-    lastIndex = match.index + match[0].length;
+    // Add remaining text
+    if (lastIndex < line.length) {
+      parts.push(line.substring(lastIndex));
+    }
+    
+    return <>{parts}</>;
+  };
+
+  // If only one line, render simply
+  if (lines.length === 1) {
+    return renderLine(lines[0], 0);
   }
-  
-  // Add remaining text
-  if (lastIndex < text.length) {
-    parts.push(text.substring(lastIndex));
-  }
-  
-  return <>{parts}</>;
+
+  // Render each line, checking for list items
+  return (
+    <div className="space-y-1">
+      {lines.map((line, idx) => {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) return null;
+        
+        // Check if line is a list item (numbered or lettered)
+        const isListItem = /^\s*(\d+|[a-zA-Z])[.)]\s+/.test(line);
+        
+        return (
+          <div key={idx} className={isListItem ? 'pl-4' : ''}>
+            {renderLine(trimmedLine, idx)}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function KartuSoal({ question, metadata, images, kisiKisi }: KartuSoalProps) {
@@ -163,24 +192,24 @@ export default function KartuSoal({ question, metadata, images, kisiKisi }: Kart
         <div className="p-4 space-y-3">
           <div className="grid grid-cols-[28%_72%] gap-2">
             <div className="border border-black">
-              <div className="bg-[#c8c8c8] font-bold text-center border-b border-black flex items-center justify-center min-h-[28px]">No.Soal</div>
+              <div className="bg-[#c8c8c8] font-bold border-b border-black h-[28px] flex items-center justify-center">No.Soal</div>
               <div className="bg-[#8eb7df] text-center py-1">{question.number}</div>
             </div>
 
             <div className="border border-black">
-              <div className="bg-[#c8c8c8] font-bold text-center border-b border-black flex items-center justify-center min-h-[28px]">Rumusan Butir Soal</div>
+              <div className="bg-[#c8c8c8] font-bold border-b border-black h-[28px] flex items-center justify-center">Rumusan Butir Soal</div>
               <div className="bg-[#8eb7df] p-2 min-h-47.5 align-top whitespace-pre-wrap wrap-break-word">{renderTextWithImages(question.text, images)}</div>
             </div>
           </div>
 
           <div className="grid grid-cols-[28%_72%] gap-2">
             <div className="border border-black">
-              <div className="bg-[#c8c8c8] font-bold text-center border-b border-black flex items-center justify-center min-h-[28px]">Kunci</div>
+              <div className="bg-[#c8c8c8] font-bold border-b border-black h-[28px] flex items-center justify-center">Kunci</div>
               <div className="bg-[#fff200] text-center py-1 font-bold">{question.answer || '-'}</div>
             </div>
 
             <div className="border border-black">
-              <div className="bg-[#c8c8c8] font-bold text-center border-b border-black flex items-center justify-center min-h-[28px]">Pilihan Jawaban</div>
+              <div className="bg-[#c8c8c8] font-bold border-b border-black h-[28px] flex items-center justify-center">Pilihan Jawaban</div>
               <div className="bg-[#fff200] p-2 min-h-38.5 space-y-1">
                 {options.map((option) => (
                   <div key={option} className="whitespace-pre-wrap wrap-break-word">{renderTextWithImages(option, images)}</div>
