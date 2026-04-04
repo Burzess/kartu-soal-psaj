@@ -166,7 +166,7 @@ export default function FileUpload({ onParsed }: FileUploadProps) {
       </div>
 
       {/* Paste Text Area */}
-      <div className="space-y-3">
+      {/* <div className="space-y-3">
         <label htmlFor="paste-soal" className="block text-base font-semibold text-gray-900">
           Paste Teks Soal Langsung
         </label>
@@ -185,7 +185,7 @@ export default function FileUpload({ onParsed }: FileUploadProps) {
         >
           📄 Parse Soal
         </button>
-      </div>
+      </div> */}
     </div>
   );
 }
