@@ -14,104 +14,77 @@ interface KunciJawabanProps {
   images?: ExtractedImage[];
 }
 
-// Helper to render text with images
+// Helper render text (Tetap sama seperti aslinya)
 function renderTextWithImages(text: string, images?: ExtractedImage[]): React.ReactNode {
   const lines = text.split('\n');
-  
   const renderLine = (line: string, lineIndex: number): React.ReactNode => {
     const imgPattern = /\[(IMG_\d+)\]|\[GAMBAR\]/g;
-    
-    if (!imgPattern.test(line)) {
-      return line;
-    }
-    
+    if (!imgPattern.test(line)) return line;
     imgPattern.lastIndex = 0;
-    
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
     let match;
-    
     while ((match = imgPattern.exec(line)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push(line.substring(lastIndex, match.index));
-      }
-      
+      if (match.index > lastIndex) parts.push(line.substring(lastIndex, match.index));
       const imgId = match[1];
-      
       if (imgId && images) {
         const img = images.find(i => i.id === imgId);
         if (img && (img.format === 'png' || img.format === 'jpeg')) {
           parts.push(
-            <img 
-              key={`${imgId}-${match.index}-${lineIndex}`}
-              src={img.data} 
-              alt={`Gambar ${imgId}`}
-              className="inline-block max-w-full max-h-24 my-1 border border-gray-300 rounded"
-            />
+            <img key={`${imgId}-${match.index}-${lineIndex}`} src={img.data} alt={`Gambar ${imgId}`} className="inline-block max-w-full max-h-24 my-1 border border-gray-300 rounded" />
           );
         } else {
-          parts.push(
-            <span key={`${imgId}-${match.index}-${lineIndex}`} className="inline-block px-2 py-1 mx-1 text-[12px] rounded" style={{ backgroundColor: '#e5e5e5', border: '1px dashed #999' }}>
-              📷 Gambar
-            </span>
-          );
+          parts.push(<span key={`${imgId}-${match.index}-${lineIndex}`} className="inline-block px-2 py-1 mx-1 text-[12px] rounded" style={{ backgroundColor: '#e5e5e5', border: '1px dashed #999' }}>📷 Gambar</span>);
         }
       } else {
-        parts.push(
-          <span key={`gambar-${match.index}-${lineIndex}`} className="inline-block px-2 py-1 mx-1 text-[12px] rounded" style={{ backgroundColor: '#e5e5e5', border: '1px dashed #999' }}>
-            📷 Gambar
-          </span>
-        );
+        parts.push(<span key={`gambar-${match.index}-${lineIndex}`} className="inline-block px-2 py-1 mx-1 text-[12px] rounded" style={{ backgroundColor: '#e5e5e5', border: '1px dashed #999' }}>📷 Gambar</span>);
       }
-      
       lastIndex = match.index + match[0].length;
     }
-    
-    if (lastIndex < line.length) {
-      parts.push(line.substring(lastIndex));
-    }
-    
+    if (lastIndex < line.length) parts.push(line.substring(lastIndex));
     return <>{parts}</>;
   };
-
-  if (lines.length === 1) {
-    return renderLine(lines[0], 0);
-  }
-
+  if (lines.length === 1) return renderLine(lines[0], 0);
   return (
     <div className="space-y-1">
       {lines.map((line, idx) => {
         const trimmed = line.trim();
         if (!trimmed) return null;
         const isListItem = /^\s*(\d+|[a-zA-Z])[.)]\s+/.test(line);
-        return (
-          <div key={idx} className={isListItem ? 'pl-6' : ''}>
-            {renderLine(trimmed, idx)}
-          </div>
-        );
+        return <div key={idx} className={isListItem ? 'pl-6' : ''}>{renderLine(trimmed, idx)}</div>;
       })}
     </div>
   );
 }
 
-export default function KunciJawaban({ questions, metadata, skorPerSoal = 1, images }: KunciJawabanProps) {
+export default function KunciJawaban({ questions, metadata, skorPerSoal = 1.5, images }: KunciJawabanProps) {
   const pgQuestions = questions.filter(q => q.type === 'PG');
   const essayQuestions = questions.filter(q => q.type === 'URAIAN');
   
-  const totalSkorPG = pgQuestions.length * skorPerSoal;
+  const hasPG = pgQuestions.length > 0;
+  const hasEssay = essayQuestions.length > 0;
+
+  // LOGIKA DINAMIS: Jika hanya ada PG (tanpa essay), skor otomatis dibagi agar max 100
+  const actualSkorPerSoalPG = (hasPG && !hasEssay) 
+    ? Number((100 / pgQuestions.length).toFixed(2)) 
+    : skorPerSoal;
+
+  const totalSkorPG = Number((pgQuestions.length * actualSkorPerSoalPG).toFixed(2));
+  const totalSkorEssay = essayQuestions.length * 8; // Default skor essay per soal
+  const totalKeseluruhan = Number((totalSkorPG + totalSkorEssay).toFixed(2));
 
   return (
     <div className="w-full p-8 text-[20px] print:break-after-page" style={{ backgroundColor: '#ffffff', color: '#000000' }}>
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className="font-bold text-[32px] mb-3">KUNCI JAWABAN & PEDOMAN PENILAIAN</h1>
-        <h2 className="font-bold text-[26px] mb-2">PENILAIAN SUMATIF AKHIR JENJANG (PSAJ)</h2>
+        {/* <h2 className="font-bold text-[26px] mb-2">PENILAIAN SUMATIF AKHIR JENJANG (PSAJ)</h2> */}
         <h2 className="font-bold text-[26px] mb-2">TAHUN PELAJARAN {metadata?.tahunPelajaran || '2025/2026'}</h2>
         <h2 className="font-bold text-[26px]">MAPEL {(metadata?.mataPelajaran || '-').toUpperCase()}</h2>
       </div>
 
       {/* Pedoman Penilaian Pilihan Ganda */}
-      {pgQuestions.length > 0 && (
+      {hasPG && (
         <>
           <div className="mb-6">
             <h3 className="font-bold text-[24px] mb-3 p-3" style={{ backgroundColor: '#e5e5e5' }}>Pedoman Penilaian Soal Pilihan Ganda</h3>
@@ -127,7 +100,7 @@ export default function KunciJawaban({ questions, metadata, skorPerSoal = 1, ima
                 <tr style={{ backgroundColor: '#ffffff' }}>
                   <td className="border border-black p-4">1-{pgQuestions.length}</td>
                   <td className="border border-black p-4 text-left">Benar</td>
-                  <td className="border border-black p-4">{skorPerSoal}</td>
+                  <td className="border border-black p-4">{actualSkorPerSoalPG}</td>
                 </tr>
                 <tr style={{ backgroundColor: '#ffffff' }}>
                   <td className="border border-black p-4"></td>
@@ -136,7 +109,7 @@ export default function KunciJawaban({ questions, metadata, skorPerSoal = 1, ima
                 </tr>
                 <tr className="font-bold" style={{ backgroundColor: '#f0f0f0' }}>
                   <td className="border border-black p-4" colSpan={2}>TOTAL SKOR PILIHAN GANDA</td>
-                  <td className="border border-black p-4">{skorPerSoal} x {pgQuestions.length} = {totalSkorPG}</td>
+                  <td className="border border-black p-4">{actualSkorPerSoalPG} x {pgQuestions.length} = {totalSkorPG}</td>
                 </tr>
               </tbody>
             </table>
@@ -161,7 +134,7 @@ export default function KunciJawaban({ questions, metadata, skorPerSoal = 1, ima
                       <span className="font-bold">{q.answer?.toLowerCase()}.</span>{' '}
                       {renderTextWithImages(q.answer && q.options[q.answer.toLowerCase() as keyof typeof q.options] || '', images)}
                     </td>
-                    <td className="border border-black p-4 text-center">{skorPerSoal}</td>
+                    <td className="border border-black p-4 text-center">{actualSkorPerSoalPG}</td>
                   </tr>
                 ))}
                 <tr className="font-bold" style={{ backgroundColor: '#f0f0f0' }}>
@@ -175,7 +148,7 @@ export default function KunciJawaban({ questions, metadata, skorPerSoal = 1, ima
       )}
 
       {/* Pedoman Penilaian Uraian */}
-      {essayQuestions.length > 0 && (
+      {hasEssay && (
         <>
           <div className="mb-6 print:break-before-page">
             <h3 className="font-bold text-[24px] mb-3 p-3" style={{ backgroundColor: '#e5e5e5' }}>Pedoman Penilaian Soal Uraian</h3>
@@ -191,7 +164,7 @@ export default function KunciJawaban({ questions, metadata, skorPerSoal = 1, ima
                 <tr style={{ backgroundColor: '#ffffff' }}>
                   <td className="border border-black p-4">8</td>
                   <td className="border border-black p-4">{essayQuestions.length}</td>
-                  <td className="border border-black p-4">8 x {essayQuestions.length} = {8 * essayQuestions.length}</td>
+                  <td className="border border-black p-4">8 x {essayQuestions.length} = {totalSkorEssay}</td>
                 </tr>
               </tbody>
             </table>
@@ -220,7 +193,7 @@ export default function KunciJawaban({ questions, metadata, skorPerSoal = 1, ima
                 })}
                 <tr className="font-bold" style={{ backgroundColor: '#f0f0f0' }}>
                   <td className="border border-black p-4 text-center" colSpan={2}>Total Skor</td>
-                  <td className="border border-black p-4 text-center">{8 * essayQuestions.length}</td>
+                  <td className="border border-black p-4 text-center">{totalSkorEssay}</td>
                 </tr>
               </tbody>
             </table>
@@ -234,9 +207,7 @@ export default function KunciJawaban({ questions, metadata, skorPerSoal = 1, ima
           <tbody>
             <tr className="font-bold text-center text-[24px]" style={{ backgroundColor: '#fef08a' }}>
               <td className="border border-black p-5">TOTAL SKOR KESELURUHAN</td>
-              <td className="border border-black p-5 w-40">
-                {totalSkorPG + (essayQuestions.length * 8)}
-              </td>
+              <td className="border border-black p-5 w-40">{totalKeseluruhan}</td>
             </tr>
           </tbody>
         </table>

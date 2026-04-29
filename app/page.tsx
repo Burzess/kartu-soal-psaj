@@ -36,10 +36,9 @@ export default function Home() {
       throw new Error('Tidak ada soal untuk diexport');
     }
 
-    // Landscape orientation: 'l' for landscape
     const pdf = new jsPDF('l', 'mm', 'a4');
-    const pageWidth = 297;  // A4 landscape width
-    const pageHeight = 210; // A4 landscape height
+    const pageWidth = 297;
+    const pageHeight = 210;
     const horizontalMargin = 10;
     const topMargin = 10;
     const bottomMargin = 14;
@@ -47,35 +46,65 @@ export default function Home() {
     const usableHeight = pageHeight - topMargin - bottomMargin;
     const cards = document.querySelectorAll('.kartu-soal-card');
 
+    const printContainer = document.createElement('div');
+    printContainer.style.position = 'absolute';
+    printContainer.style.top = '0';
+    printContainer.style.left = '0';
+    printContainer.style.width = '1000px';
+    printContainer.style.opacity = '0';
+    printContainer.style.pointerEvents = 'none';
+    printContainer.style.zIndex = '-1000';
+    document.body.appendChild(printContainer);
+
+    let pageAdded = false;
+
+    // Helper untuk mendeteksi dan menunggu seluruh gambar selesai dimuat
+    const waitForImages = (element: HTMLElement) => {
+      const images = Array.from(element.querySelectorAll('img'));
+      return Promise.all(images.map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          img.onload = resolve;
+          // Tetap di-resolve meski error, agar eksekusi PDF tidak hang/berhenti jika ada 1 gambar rusak
+          img.onerror = resolve;
+        });
+      }));
+    };
+
     for (let i = 0; i < cards.length; i++) {
       const card = cards[i] as HTMLElement;
       let isolatedCard: HTMLElement | null = null;
 
       try {
-        // Capture an isolated clone so parent spacing (e.g. space-y margins)
-        // does not shift card position in the exported page.
         isolatedCard = card.cloneNode(true) as HTMLElement;
-        isolatedCard.style.position = 'fixed';
-        isolatedCard.style.left = '-10000px';
-        isolatedCard.style.top = '0';
         isolatedCard.style.margin = '0';
-        isolatedCard.style.width = `${card.offsetWidth}px`;
-        isolatedCard.style.zIndex = '-1';
-        document.body.appendChild(isolatedCard);
+        isolatedCard.style.width = '100%';
+        printContainer.appendChild(isolatedCard);
 
-        // One card -> one PDF page is more stable than slicing large canvases.
+        // WAJIB: Tunggu semua gambar dalam kartu soal ini selesai di-render browser
+        await waitForImages(isolatedCard);
+
+        // Ekstra jeda waktu agar browser sempat melakukan repainting layout setelah gambar muncul
+        await new Promise(resolve => setTimeout(resolve, 150));
+
         const canvas = await html2canvas(isolatedCard, {
-          scale: 1.5,
+          scale: 2,
           useCORS: true,
+          allowTaint: false,
           logging: false,
           backgroundColor: '#ffffff',
-          allowTaint: true,
-          foreignObjectRendering: false,
-          removeContainer: true,
-          imageTimeout: 15000
+          windowWidth: 1000,
+          onclone: (clonedDoc) => {
+            // SOLUSI LAB COLOR: Hapus class background gradient penyebab crash pada elemen main saat diclone
+            const main = clonedDoc.querySelector('main');
+            if (main) {
+              main.style.background = '#ffffff';
+              main.style.backgroundImage = 'none';
+            }
+          }
         });
 
-        if (i > 0) {
+        if (pageAdded) {
           pdf.addPage();
         }
 
@@ -83,31 +112,21 @@ export default function Home() {
         const heightRatio = usableHeight / canvas.height;
         const ratio = Math.min(widthRatio, heightRatio);
 
-        // Keep additional breathing room so content is not too close to page edge.
         const safeRatio = ratio * 0.96;
         const renderWidth = canvas.width * safeRatio;
         const renderHeight = canvas.height * safeRatio;
         const offsetX = horizontalMargin + (usableWidth - renderWidth) / 2;
         const offsetY = topMargin;
 
-        // Convert canvas to data URL first to avoid issues
         const imgData = canvas.toDataURL('image/jpeg', 0.95);
-        pdf.addImage(
-          imgData,
-          'JPEG',
-          offsetX,
-          offsetY,
-          renderWidth,
-          renderHeight
-        );
+        pdf.addImage(imgData, 'JPEG', offsetX, offsetY, renderWidth, renderHeight);
+
+        pageAdded = true;
+
+        canvas.width = 0;
+        canvas.height = 0;
       } catch (cardError) {
-        console.error('[DEBUG][PDF] Gagal render kartu ke PDF', {
-          cardIndex: i,
-          cardError: cardError instanceof Error ? cardError.message : String(cardError),
-          cardHTML: card.innerHTML.substring(0, 200)
-        });
-        // Skip this card and continue with others instead of failing entirely
-        continue;
+        console.error(`[DEBUG][PDF] Gagal render kartu soal index ke-${i}`, cardError);
       } finally {
         if (isolatedCard && isolatedCard.parentNode) {
           isolatedCard.parentNode.removeChild(isolatedCard);
@@ -115,13 +134,12 @@ export default function Home() {
       }
     }
 
-    // Check if at least one page was successfully added
-    if (pdf.getNumberOfPages() === 0 || (cards.length > 0 && pdf.getNumberOfPages() === 1)) {
-      // jsPDF starts with 1 page, so we need at least content on it
-      const firstCanvas = document.querySelector('.kartu-soal-card');
-      if (!firstCanvas) {
-        throw new Error('Tidak ada kartu soal yang berhasil di-render');
-      }
+    if (printContainer.parentNode) {
+      document.body.removeChild(printContainer);
+    }
+
+    if (!pageAdded) {
+      throw new Error('Tidak ada kartu soal yang berhasil di-render ke PDF');
     }
 
     return pdf.output('blob');
@@ -138,48 +156,69 @@ export default function Home() {
     setParseResult(result);
   };
 
-  const handleExportPDF = async () => {
-    if (!parseResult || parseResult.questions.length === 0) return;
+  // const handleExportPDF = async () => {
+  //   if (!parseResult || parseResult.questions.length === 0) return;
 
-    setIsExporting(true);
-    
-    try {
-      const pdfBlob = await buildPdfBlob();
+  //   setIsExporting(true);
 
-      const safeSubject = (metadata.mataPelajaran || 'PSAJ')
-        .replace(/[^a-zA-Z0-9-_ ]/g, '_')
-        .trim()
-        .replace(/\s+/g, '_');
-      const fileName = `Kartu_Soal_${safeSubject}_${new Date().getTime()}.pdf`;
+  //   try {
+  //     const pdfBlob = await buildPdfBlob();
 
-      const blobUrl = URL.createObjectURL(pdfBlob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = fileName;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+  //     const safeSubject = (metadata.mataPelajaran || 'PSAJ')
+  //       .replace(/[^a-zA-Z0-9-_ ]/g, '_')
+  //       .trim()
+  //       .replace(/\s+/g, '_');
+  //     const fileName = `Kartu_Soal_${safeSubject}_${new Date().getTime()}.pdf`;
 
-      console.error('[DEBUG][PDF] Export berhasil', {
-        fileName,
-        sizeBytes: pdfBlob.size,
-        totalCards: parseResult.questions.length
-      });
+  //     const blobUrl = URL.createObjectURL(pdfBlob);
+  //     const link = document.createElement('a');
+  //     link.href = blobUrl;
+  //     link.download = fileName;
+  //     link.style.display = 'none';
+  //     document.body.appendChild(link);
+  //     link.click();
+  //     document.body.removeChild(link);
 
-      window.setTimeout(() => {
-        URL.revokeObjectURL(blobUrl);
-      }, 15000);
-    } catch (error) {
-      console.error('[DEBUG][PDF] Gagal generate PDF', {
-        totalCards: parseResult.questions.length,
-        metadata,
-        error
-      });
-      alert('Gagal membuat PDF. Coba gunakan Print (Ctrl+P) sebagai alternatif.');
-    } finally {
-      setIsExporting(false);
-    }
+  //     console.error('[DEBUG][PDF] Export berhasil', {
+  //       fileName,
+  //       sizeBytes: pdfBlob.size,
+  //       totalCards: parseResult.questions.length
+  //     });
+
+  //     window.setTimeout(() => {
+  //       URL.revokeObjectURL(blobUrl);
+  //     }, 15000);
+  //   } catch (error) {
+  //     console.error('[DEBUG][PDF] Gagal generate PDF', {
+  //       totalCards: parseResult.questions.length,
+  //       metadata,
+  //       error
+  //     });
+  //     alert('Gagal membuat PDF. Coba gunakan Print (Ctrl+P) sebagai alternatif.');
+  //   } finally {
+  //     setIsExporting(false);
+  //   }
+  // };
+
+  // GANTI handleExportPDF
+  const handleExportPDF = () => {
+    // Pastikan kita tidak di tampilan kunci jawaban
+    if (showKunciJawaban) setShowKunciJawaban(false);
+
+    // Beri jeda sedikit agar React selesai merender ulang UI sebelum print dialog muncul
+    setTimeout(() => {
+      window.print();
+    }, 100);
+  };
+
+  // GANTI handleExportKunciJawaban
+  const handleExportKunciJawaban = () => {
+    // Pastikan kita berada di tampilan kunci jawaban
+    if (!showKunciJawaban) setShowKunciJawaban(true);
+
+    setTimeout(() => {
+      window.print();
+    }, 100);
   };
 
   const handlePreviewPDF = async () => {
@@ -218,88 +257,88 @@ export default function Home() {
     }
   };
 
-  const handleExportKunciJawaban = async () => {
-    if (!parseResult || parseResult.questions.length === 0) return;
+  // const handleExportKunciJawaban = async () => {
+  //   if (!parseResult || parseResult.questions.length === 0) return;
 
-    setIsExporting(true);
-    
-    try {
-      // Legal paper size: 215.9mm x 355.6mm (8.5" x 14")
-      const pdf = new jsPDF('p', 'mm', 'legal');
-      const pageWidth = 215.9;
-      const pageHeight = 355.6;
-      const margin = 10;
-      const usableWidth = pageWidth - margin * 2;
-      const usableHeight = pageHeight - margin * 2;
-      
-      const kunciElement = document.querySelector('.kunci-jawaban-container');
-      if (!kunciElement) {
-        throw new Error('Elemen kunci jawaban tidak ditemukan');
-      }
+  //   setIsExporting(true);
 
-      const canvas = await html2canvas(kunciElement as HTMLElement, {
-        scale: 3,  // Increased for better quality
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        allowTaint: true,
-      });
+  //   try {
+  //     // Legal paper size: 215.9mm x 355.6mm (8.5" x 14")
+  //     const pdf = new jsPDF('p', 'mm', 'legal');
+  //     const pageWidth = 215.9;
+  //     const pageHeight = 355.6;
+  //     const margin = 10;
+  //     const usableWidth = pageWidth - margin * 2;
+  //     const usableHeight = pageHeight - margin * 2;
 
-      // Calculate dimensions - fit width to page, allow multiple pages for height
-      const imgWidth = usableWidth;
-      const imgHeight = (canvas.height * usableWidth) / canvas.width;
-      
-      // Calculate how many pages needed
-      const totalPages = Math.ceil(imgHeight / usableHeight);
-      
-      // Height of content per page in canvas pixels
-      const pageCanvasHeight = (usableHeight / imgWidth) * canvas.width;
-      
-      for (let page = 0; page < totalPages; page++) {
-        if (page > 0) {
-          pdf.addPage();
-        }
-        
-        // Create a temporary canvas for this page slice
-        const pageCanvas = document.createElement('canvas');
-        pageCanvas.width = canvas.width;
-        pageCanvas.height = Math.min(pageCanvasHeight, canvas.height - page * pageCanvasHeight);
-        
-        const ctx = pageCanvas.getContext('2d');
-        if (ctx) {
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-          
-          // Draw the portion of the main canvas for this page
-          ctx.drawImage(
-            canvas,
-            0, page * pageCanvasHeight,  // Source x, y
-            canvas.width, pageCanvas.height,  // Source width, height
-            0, 0,  // Dest x, y
-            pageCanvas.width, pageCanvas.height  // Dest width, height
-          );
-        }
-        
-        const pageImgData = pageCanvas.toDataURL('image/jpeg', 0.95);
-        const pageImgHeight = (pageCanvas.height * usableWidth) / pageCanvas.width;
-        
-        pdf.addImage(pageImgData, 'JPEG', margin, margin, imgWidth, pageImgHeight);
-      }
+  //     const kunciElement = document.querySelector('.kunci-jawaban-container');
+  //     if (!kunciElement) {
+  //       throw new Error('Elemen kunci jawaban tidak ditemukan');
+  //     }
 
-      const safeSubject = (metadata.mataPelajaran || 'PSAJ')
-        .replace(/[^a-zA-Z0-9-_ ]/g, '_')
-        .trim()
-        .replace(/\s+/g, '_');
-      const fileName = `Kunci_Jawaban_${safeSubject}_${new Date().getTime()}.pdf`;
+  //     const canvas = await html2canvas(kunciElement as HTMLElement, {
+  //       scale: 3,  // Increased for better quality
+  //       useCORS: true,
+  //       logging: false,
+  //       backgroundColor: '#ffffff',
+  //       allowTaint: true,
+  //     });
 
-      pdf.save(fileName);
-    } catch (error) {
-      console.error('[DEBUG][PDF] Gagal export kunci jawaban', error);
-      alert('Gagal membuat PDF kunci jawaban.');
-    } finally {
-      setIsExporting(false);
-    }
-  };
+  //     // Calculate dimensions - fit width to page, allow multiple pages for height
+  //     const imgWidth = usableWidth;
+  //     const imgHeight = (canvas.height * usableWidth) / canvas.width;
+
+  //     // Calculate how many pages needed
+  //     const totalPages = Math.ceil(imgHeight / usableHeight);
+
+  //     // Height of content per page in canvas pixels
+  //     const pageCanvasHeight = (usableHeight / imgWidth) * canvas.width;
+
+  //     for (let page = 0; page < totalPages; page++) {
+  //       if (page > 0) {
+  //         pdf.addPage();
+  //       }
+
+  //       // Create a temporary canvas for this page slice
+  //       const pageCanvas = document.createElement('canvas');
+  //       pageCanvas.width = canvas.width;
+  //       pageCanvas.height = Math.min(pageCanvasHeight, canvas.height - page * pageCanvasHeight);
+
+  //       const ctx = pageCanvas.getContext('2d');
+  //       if (ctx) {
+  //         ctx.fillStyle = '#ffffff';
+  //         ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+
+  //         // Draw the portion of the main canvas for this page
+  //         ctx.drawImage(
+  //           canvas,
+  //           0, page * pageCanvasHeight,  // Source x, y
+  //           canvas.width, pageCanvas.height,  // Source width, height
+  //           0, 0,  // Dest x, y
+  //           pageCanvas.width, pageCanvas.height  // Dest width, height
+  //         );
+  //       }
+
+  //       const pageImgData = pageCanvas.toDataURL('image/jpeg', 0.95);
+  //       const pageImgHeight = (pageCanvas.height * usableWidth) / pageCanvas.width;
+
+  //       pdf.addImage(pageImgData, 'JPEG', margin, margin, imgWidth, pageImgHeight);
+  //     }
+
+  //     const safeSubject = (metadata.mataPelajaran || 'PSAJ')
+  //       .replace(/[^a-zA-Z0-9-_ ]/g, '_')
+  //       .trim()
+  //       .replace(/\s+/g, '_');
+  //     const fileName = `Kunci_Jawaban_${safeSubject}_${new Date().getTime()}.pdf`;
+
+  //     pdf.save(fileName);
+  //   } catch (error) {
+  //     console.error('[DEBUG][PDF] Gagal export kunci jawaban', error);
+  //     alert('Gagal membuat PDF kunci jawaban.');
+  //   } finally {
+  //     setIsExporting(false);
+  //   }
+  // };
 
   const handleReset = () => {
     setParseResult(null);
@@ -310,13 +349,13 @@ export default function Home() {
     <main className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 py-12 px-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-12 print:hidden">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            Generator Kartu Soal PSAJ
+            Kartu Soal
           </h1>
-          <p className="text-gray-600">
+          {/* <p className="text-gray-600">
             Upload file soal atau paste langsung untuk membuat kartu soal
-          </p>
+          </p> */}
         </div>
 
         {/* Main Content */}
@@ -459,8 +498,8 @@ export default function Home() {
             {/* Preview Kunci Jawaban atau Kartu Soal */}
             {showKunciJawaban ? (
               <div className="kunci-jawaban-container">
-                <KunciJawaban 
-                  questions={parseResult.questions} 
+                <KunciJawaban
+                  questions={parseResult.questions}
                   metadata={metadata}
                   skorPerSoal={1.5}
                   images={parseResult.images}
@@ -471,16 +510,16 @@ export default function Home() {
                 {parseResult.questions.map((question, index) => (
                   <div key={index} className="kartu-soal-card">
                     {question.type === 'URAIAN' ? (
-                      <KartuSoalEssay 
-                        question={question} 
-                        metadata={metadata} 
+                      <KartuSoalEssay
+                        question={question}
+                        metadata={metadata}
                         images={parseResult.images}
                         kisiKisi={getKisiKisi(question.number)}
                       />
                     ) : (
-                      <KartuSoal 
-                        question={question} 
-                        metadata={metadata} 
+                      <KartuSoal
+                        question={question}
+                        metadata={metadata}
                         images={parseResult.images}
                         kisiKisi={getKisiKisi(question.number)}
                       />
@@ -496,15 +535,44 @@ export default function Home() {
       {/* Print Styles */}
       <style jsx global>{`
         @media print {
+          @page {
+            /* DINAMIS: Otomatis A4 Landscape untuk Kartu Soal, Legal Portrait untuk Kunci Jawaban */
+            size: ${showKunciJawaban ? 'legal portrait' : 'a4 landscape'};
+            margin: 10mm; /* Otomatis mengatur Margin Minimum */
+          }
+          
           body {
             margin: 0;
             padding: 0;
+            background: white !important;
+            
+            /* OTOMATIS AKTIFKAN OPSI "GRAFIS LATAR BELAKANG" / BACKGROUND GRAPHICS */
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
           }
+          
+          main {
+            /* Reset background warna-warni saat print */
+            background: none !important;
+            padding: 0 !important;
+            
+            /* OTOMATISKAN SKALA 80% (Zooming engine didukung penuh oleh browser Chromium / Edge) */
+            zoom: 0.8; 
+          }
+          
           .print\\:hidden {
             display: none !important;
           }
-          .print\\:break-after-page {
+          
+          .kartu-soal-card {
             page-break-after: always;
+            break-after: page;
+          }
+          
+          /* Mencegah tabel terpotong di tengah baris pada kunci jawaban */
+          .kunci-jawaban-container table tr {
+            page-break-inside: avoid;
           }
         }
       `}</style>

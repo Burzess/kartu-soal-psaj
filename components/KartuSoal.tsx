@@ -134,7 +134,7 @@ export default function KartuSoal({ question, metadata, images, kisiKisi }: Kart
   }
 
   return (
-    <div className="w-full bg-white border-2 border-black print:border-black print:break-after-page text-black text-[12px] leading-normal" style={{ backgroundColor: '#ffffff' }}>
+    <div className="mt-8 w-full bg-white border-2 border-black print:border-black print:break-after-page text-black text-[12px] leading-normal" style={{ backgroundColor: '#ffffff' }}>
       <div className="bg-[#c8c8c8] border-b border-black text-center font-bold text-[24px] py-2 tracking-tight">
         KARTU SOAL BENTUK PILIHAN GANDA
       </div>
