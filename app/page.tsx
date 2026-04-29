@@ -418,15 +418,15 @@ export default function Home() {
                     disabled={isExporting}
                     className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-md"
                   >
-                    {isExporting ? 'Membuat PDF...' : 'Export PDF'}
+                    {isExporting ? 'Membuat Kartu Soal...' : 'Download Kartu Soal'}
                   </button>
-                  <button
+                  {/* <button
                     onClick={handlePreviewPDF}
                     disabled={isExporting}
                     className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-md"
                   >
                     Preview PDF
-                  </button>
+                  </button> */}
                   <button
                     onClick={() => setShowKunciJawaban(!showKunciJawaban)}
                     className="px-6 py-3 bg-amber-600 text-white font-semibold rounded-lg hover:bg-amber-700 transition-colors shadow-md"
@@ -439,7 +439,7 @@ export default function Home() {
                       disabled={isExporting}
                       className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-md"
                     >
-                      Export Kunci Jawaban
+                      Download Kunci Jawaban
                     </button>
                   )}
                 </div>
