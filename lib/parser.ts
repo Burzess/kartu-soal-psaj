@@ -719,11 +719,30 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
       let merged = line;
       while (i + 1 < rawLines.length) {
         const nextLine = rawLines[i + 1].trim();
-        // Stop merging if next line is empty, another option letter, a question number, or a marker
         if (!nextLine) break;
         if (/^[a-eA-E][.)]/.test(nextLine)) break;
         if (/^_*\s*\d+[.)]\s/.test(nextLine)) break;
-        if (/^(ANS|ANSWER|JAWABAN|KUNCI|MULTIPLE|ESSAY|URAIAN|SHORT|ANSWER\s*KEY)/i.test(nextLine)) break;
+        if (/^_*\s*\d+[.)]$/.test(nextLine)) break;
+        if (/^(ANS|ANSWER|JAWABAN|KUNCI|MULTIPLE|ESSAY|URAIAN|SHORT)/i.test(nextLine)) break;
+        merged = merged + ' ' + nextLine;
+        i++;
+      }
+      line = merged;
+    }
+    
+    // If line is just a question number like "1." or "2)" without text, merge with
+    // ALL following continuation lines until we hit another pattern
+    if (/^_*\s*\d+[.)]$/.test(line)) {
+      // Strip leading underscores
+      line = line.replace(/^_+\s*/, '');
+      let merged = line;
+      while (i + 1 < rawLines.length) {
+        const nextLine = rawLines[i + 1].trim();
+        if (!nextLine) break;
+        if (/^[a-eA-E][.)]/.test(nextLine)) break;
+        if (/^_*\s*\d+[.)]\s/.test(nextLine)) break;
+        if (/^_*\s*\d+[.)]$/.test(nextLine)) break;
+        if (/^(ANS|ANSWER|JAWABAN|KUNCI|MULTIPLE|ESSAY|URAIAN|SHORT)/i.test(nextLine)) break;
         merged = merged + ' ' + nextLine;
         i++;
       }
@@ -735,9 +754,16 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
     if (cleanLines.length > 0 && line.length > 0) {
       const prevLine = cleanLines[cleanLines.length - 1];
       const isOptionStart = /^[a-eA-E][.)]\s/.test(line);
-      const isQuestionStart = /^\d+[.)]\s/.test(line);
+      const isQuestionStart = /^_*\s*\d+[.)]\s/.test(line);
       const isMarker = /^(ANS|ANSWER|JAWABAN|KUNCI|MULTIPLE|ESSAY|URAIAN|SHORT|PTS|\[IMG_|\[GAMBAR)/i.test(line);
       const prevIsOrphanOption = /^[a-eA-E][.)]$/.test(prevLine);
+      const prevIsOrphanQuestion = /^\d+[.)]$/.test(prevLine);
+      
+      // If previous line is an orphan question number, merge current line into it
+      if (prevIsOrphanQuestion && !isQuestionStart && !isMarker) {
+        cleanLines[cleanLines.length - 1] = prevLine + ' ' + line;
+        continue;
+      }
       
       // If current line doesn't start with any known pattern, it's a continuation
       if (!isOptionStart && !isQuestionStart && !isMarker && !prevIsOrphanOption) {
