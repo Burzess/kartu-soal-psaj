@@ -37,8 +37,20 @@ export function parseTextToQuestions(text: string): ParseResult {
   let currentState: 'question' | 'options' | 'answer' = 'question';
   let isUraianMode = false;
   let allowNumberReset = true;
-  
+  let answerKeyStartIndex = -1;
+
+  // Pre-scan: find Answer Key / Answer Section
   for (let i = 0; i < lines.length; i++) {
+    if (/^(ANSWER\s*KEY|ANSWER\s*SECTION|KUNCI\s*JAWABAN)/i.test(lines[i]) ||
+        /Answer\s*Section/i.test(lines[i])) {
+      answerKeyStartIndex = i;
+      break;
+    }
+  }
+
+  const parseEndIndex = answerKeyStartIndex >= 0 ? answerKeyStartIndex : lines.length;
+  
+  for (let i = 0; i < parseEndIndex; i++) {
     const line = lines[i];
     
     // Skip empty lines
@@ -47,8 +59,8 @@ export function parseTextToQuestions(text: string): ParseResult {
     // Detect section markers
     if (/ESSAY|URAIAN|SHORT ANSWER/i.test(line)) {
       if (currentQuestion && currentQuestion.number) {
-        if (isUraianMode || validateQuestion(currentQuestion)) {
-          questions.push(currentQuestion as Question);
+        if (isUraianMode || validateQuestion(currentQuestion) || validateQuestionPartial(currentQuestion)) {
+          questions.push(finalizeQuestion(currentQuestion));
         } else {
           errors.push(`Soal ${currentQuestion.number} tidak lengkap`);
         }
@@ -60,10 +72,10 @@ export function parseTextToQuestions(text: string): ParseResult {
       allowNumberReset = true;
       continue;
     }
-    if (/MULTIPLE CHOICE|PILIHAN GANDA/i.test(line)) {
+    if (/^Multiple\s*Choice$|^PILIHAN\s*GANDA$/i.test(line)) {
       if (currentQuestion && currentQuestion.number) {
-        if (isUraianMode || validateQuestion(currentQuestion)) {
-          questions.push(currentQuestion as Question);
+        if (isUraianMode || validateQuestion(currentQuestion) || validateQuestionPartial(currentQuestion)) {
+          questions.push(finalizeQuestion(currentQuestion));
         } else {
           errors.push(`Soal ${currentQuestion.number} tidak lengkap`);
         }
@@ -76,8 +88,9 @@ export function parseTextToQuestions(text: string): ParseResult {
       continue;
     }
     
-    // Detect question number (1. atau 1) di awal baris)
-    const questionMatch = line.match(/^(\d+)[.)]\s+(.+)$/);
+    // Detect question number — also handles ExamView Test format "____ 1. text"
+    const cleanedLine = line.replace(/^_+\s*/, '');
+    const questionMatch = cleanedLine.match(/^(\d+)[.)]\s+(.+)$/);
     if (questionMatch) {
       const detectedNumber = parseInt(questionMatch[1]);
       const canStartNewQuestion =
@@ -88,8 +101,8 @@ export function parseTextToQuestions(text: string): ParseResult {
       if (canStartNewQuestion) {
         // Save previous question if exists
         if (currentQuestion && currentQuestion.number) {
-          if (isUraianMode || validateQuestion(currentQuestion)) {
-            questions.push(currentQuestion as Question);
+          if (isUraianMode || validateQuestion(currentQuestion) || validateQuestionPartial(currentQuestion)) {
+            questions.push(finalizeQuestion(currentQuestion));
           } else {
             errors.push(`Soal ${currentQuestion.number} tidak lengkap`);
           }
@@ -108,10 +121,8 @@ export function parseTextToQuestions(text: string): ParseResult {
         continue;
       }
 
-      // Numbered lines inside question body (e.g. image captions / list points)
-      // should be treated as continuation text with preserved line break
+      // Numbered lines inside question body
       if (currentQuestion && currentState === 'question') {
-        // Preserve as new line for numbered/lettered list items
         currentQuestion.text = `${currentQuestion.text || ''}\n${line}`.trim();
       } else if (currentQuestion && currentQuestion.options && currentState === 'options' && !isUraianMode) {
         const lastOption = findLastOption(currentQuestion.options);
@@ -124,11 +135,6 @@ export function parseTextToQuestions(text: string): ParseResult {
     
     // For URAIAN, only collect text and answer
     if (isUraianMode && currentQuestion) {
-      // Detect answer key - multiple formats
-      // Format 1: ANS: jawaban / ANSWER: jawaban
-      // Format 2: JAWABAN: teks / KUNCI: teks
-      // Format 3: PEMBAHASAN: teks
-      // Format 4: ANS (on its own line, answer on next line)
       const answerMatch = line.match(/^(ANS|ANSWER|JAWABAN|KUNCI|PEMBAHASAN)\s*[:.-]?\s*(.*)$/i);
       if (answerMatch) {
         const firstAnswerLine = answerMatch[2].trim();
@@ -139,20 +145,15 @@ export function parseTextToQuestions(text: string): ParseResult {
         continue;
       }
       
-      // Also detect PTS pattern which indicates end of answer
       if (line.match(/^PTS\s*[:.-]?\s*\d+/i)) {
-        // Points line - save current question and prepare for next
         continue;
       }
       
       // Continue question text
       if (currentState === 'question') {
-        // Don't add lines that look like answer markers
         if (!line.match(/^(ANS|ANSWER|JAWABAN|KUNCI|PEMBAHASAN|PTS)/i)) {
-          // Check if line is a point/list item (1., 2., a., b., 1), a), etc.)
           const isPointLine = line.match(/^\s*(\d+|[a-zA-Z])[.)]\s+.+/);
           if (isPointLine) {
-            // Preserve as new line for readability
             currentQuestion.text = (currentQuestion.text || '') + '\n' + line.trim();
           } else {
             currentQuestion.text = (currentQuestion.text || '') + ' ' + line;
@@ -160,9 +161,7 @@ export function parseTextToQuestions(text: string): ParseResult {
           currentQuestion.text = currentQuestion.text.trim();
         }
       } else if (currentState === 'answer') {
-        // Don't add lines that look like new questions or markers
         if (!line.match(/^\d+[.)]\s+/) && !line.match(/^(PTS|ESSAY|URAIAN|SHORT ANSWER)/i)) {
-          // Check if line is a point/list item
           const isPointLine = line.match(/^\s*(\d+|[a-zA-Z])[.)]\s+.+/);
           if (isPointLine || currentQuestion.answer) {
             currentQuestion.answer = currentQuestion.answer
@@ -214,10 +213,30 @@ export function parseTextToQuestions(text: string): ParseResult {
   
   // Save last question
   if (currentQuestion && currentQuestion.number) {
-    if (isUraianMode || validateQuestion(currentQuestion)) {
-      questions.push(currentQuestion as Question);
+    if (isUraianMode || validateQuestion(currentQuestion) || validateQuestionPartial(currentQuestion)) {
+      questions.push(finalizeQuestion(currentQuestion));
     } else {
       errors.push(`Soal ${currentQuestion.number} tidak lengkap`);
+    }
+  }
+
+  // Phase 2: Parse Answer Key section and merge answers
+  // Debug: show lines that might contain answer section
+  const answerRelatedLines = lines.map((l, i) => ({ i, l })).filter(x => /answer|section|kunci|key/i.test(x.l));
+  console.error('[DEBUG][PARSE] Answer Key scan', { 
+    answerKeyStartIndex, totalLines: lines.length,
+    answerRelatedLines: answerRelatedLines.slice(0, 10),
+    last15: lines.slice(-15)
+  });
+  if (answerKeyStartIndex >= 0) {
+    const answerMap = parseAnswerKeySection(lines, answerKeyStartIndex + 1);
+    console.error('[DEBUG][PARSE] Answer Key parsed', { answerMapSize: answerMap.size, sample: Array.from(answerMap.entries()).slice(0, 5) });
+    if (answerMap.size > 0) {
+      for (const q of questions) {
+        if (!q.answer && answerMap.has(q.number)) {
+          q.answer = answerMap.get(q.number)!;
+        }
+      }
     }
   }
   
@@ -237,6 +256,59 @@ function validateQuestion(q: Partial<Question>): q is Question {
   );
 }
 
+// Partial validation: has text and at least some options (answer may come from Answer Key later)
+function validateQuestionPartial(q: Partial<Question>): boolean {
+  return !!(
+    q.number &&
+    q.text &&
+    q.options &&
+    (q.options.a || q.options.b || q.options.c || q.options.d)
+  );
+}
+
+// Safely cast partial question to full Question with defaults
+function finalizeQuestion(q: Partial<Question>): Question {
+  return {
+    number: q.number || 0,
+    text: q.text || '',
+    options: {
+      a: q.options?.a || '',
+      b: q.options?.b || '',
+      c: q.options?.c || '',
+      d: q.options?.d || '',
+      ...(q.options?.e ? { e: q.options.e } : {})
+    },
+    answer: q.answer || '',
+    type: q.type || 'PG',
+    ...(q.images ? { images: q.images } : {})
+  };
+}
+
+// Parse Answer Key section from ExamView Test export
+// Supports formats: "1. B", "1. ANS: B", "1) B", multi-column tables
+function parseAnswerKeySection(lines: string[], startIndex: number): Map<number, string> {
+  const answerMap = new Map<number, string>();
+
+  for (let i = startIndex; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // Skip section type headers within the answer section (e.g. "MULTIPLE CHOICE", "ESSAY")
+    if (/^(MULTIPLE\s*CHOICE|ESSAY|URAIAN|SHORT\s*ANSWER|PILIHAN\s*GANDA)/i.test(line)) continue;
+
+    // Match: number + separator + optional "ANS:" + letter (A-E)
+    const pattern = /(\d+)[.)]\s*(?:ANS\s*[:.-]?\s*)?([A-Ea-e])(?:\s|$)/g;
+    let match;
+    while ((match = pattern.exec(line)) !== null) {
+      const num = parseInt(match[1]);
+      const letter = match[2].toUpperCase();
+      answerMap.set(num, letter);
+    }
+  }
+
+  return answerMap;
+}
+
 function findLastOption(options: any): 'a' | 'b' | 'c' | 'd' | 'e' | null {
   if (options.e) return 'e';
   if (options.d) return 'd';
@@ -244,6 +316,81 @@ function findLastOption(options: any): 'a' | 'b' | 'c' | 'd' | 'e' | null {
   if (options.b) return 'b';
   if (options.a) return 'a';
   return null;
+}
+
+// Split lines that contain multiple inline options (from N-column table layouts)
+// e.g. "a. Jakarta b. Bandung" → two separate lines
+function splitInlineOptions(text: string): string {
+  const lines = text.split('\n');
+  const result: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) { result.push(line); continue; }
+
+    // Find positions where option patterns start: [a-eA-E][.)] followed by space
+    const positions: number[] = [];
+    for (let i = 0; i < trimmed.length - 2; i++) {
+      const ch = trimmed[i].toLowerCase();
+      if (ch >= 'a' && ch <= 'e') {
+        const next = trimmed[i + 1];
+        const after = trimmed[i + 2];
+        if ((next === '.' || next === ')') && (after === ' ' || after === '\t')) {
+          if (i === 0 || /\s/.test(trimmed[i - 1])) {
+            positions.push(i);
+          }
+        }
+      }
+    }
+
+    if (positions.length >= 2) {
+      // Verify all detected letters are unique (no duplicates)
+      const letters = positions.map(p => trimmed[p].toLowerCase());
+      const uniqueLetters = new Set(letters);
+      if (uniqueLetters.size === letters.length) {
+        for (let j = 0; j < positions.length; j++) {
+          const start = positions[j];
+          const end = j + 1 < positions.length ? positions[j + 1] : trimmed.length;
+          const part = trimmed.substring(start, end).trim();
+          if (part) result.push(part);
+        }
+        continue;
+      }
+    }
+
+    // Also split inline answer-key entries: "1. B 2. A 3. C ..."
+    const akPositions: number[] = [];
+    for (let i = 0; i < trimmed.length - 3; i++) {
+      if (/\d/.test(trimmed[i])) {
+        // Find end of number
+        let numEnd = i + 1;
+        while (numEnd < trimmed.length && /\d/.test(trimmed[numEnd])) numEnd++;
+        if (numEnd < trimmed.length - 1) {
+          const sep = trimmed[numEnd];
+          const afterSep = trimmed[numEnd + 1];
+          if ((sep === '.' || sep === ')') && afterSep === ' ') {
+            if (i === 0 || /\s/.test(trimmed[i - 1])) {
+              akPositions.push(i);
+            }
+          }
+        }
+      }
+    }
+    if (akPositions.length >= 3) {
+      // Likely multi-column answer key row
+      for (let j = 0; j < akPositions.length; j++) {
+        const start = akPositions[j];
+        const end = j + 1 < akPositions.length ? akPositions[j + 1] : trimmed.length;
+        const part = trimmed.substring(start, end).trim();
+        if (part) result.push(part);
+      }
+      continue;
+    }
+
+    result.push(trimmed);
+  }
+
+  return result.join('\n');
 }
 
 // Extract images from RTF and return them with placeholder markers
@@ -479,17 +626,20 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
   text = text.replace(/\{\\stylesheet[\s\S]*?\}/g, '');
   text = text.replace(/\{\\info[\s\S]*?\}/g, '');
   
-  // Step 2: Table handling
-  text = text.replace(/\\cell\s*/g, '\n');
-  text = text.replace(/\\row\s*/g, '\n');
+  // Step 2: Table handling — column-agnostic
+  // \cell → tab (not newline) so options in same row stay on same line
+  // \row → newline to separate table rows
+  text = text.replace(/\\cell(?![a-z])\s*/g, '\t');
+  text = text.replace(/\\row(?![a-z])\s*/g, '\n');
   text = text.replace(/\\trowd[^\\\{]*?(?=\\|{)/g, '');
   text = text.replace(/\\clvertalt/g, '');
   text = text.replace(/\\cellx\d+/g, '');
   text = text.replace(/\\intbl/g, '');
   
   // Step 3: Replace RTF codes
-  text = text.replace(/\\par\s*/g, '\n');
-  text = text.replace(/\\tab\s*/g, ' ');
+  // IMPORTANT: (?![a-z]) prevents \par from matching inside \pard (which would leave orphan 'd')
+  text = text.replace(/\\par(?![a-z])\s*/g, '\n');
+  text = text.replace(/\\tab(?![a-z])\s*/g, ' ');
   
   // Step 4: Special characters - Handle Windows-1252 encoding (common in Indonesian RTF)
   // RTF uses \'XX for hex-encoded characters
@@ -534,8 +684,18 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
     // Skip empty
     if (!line) continue;
     
-    // Skip standalone "d" that's NOT "d."
-    if (line === 'd') continue;
+    // Skip standalone single letters (artifact from RTF table parsing)
+    if (/^[a-eA-E]$/.test(line)) continue;
+    
+    // Skip ExamView Test header noise lines
+    if (/^(Name|Class|Date|ID)\s*[:_]?\s*$/i.test(line)) continue;
+    if (/^Page\s+\d+/i.test(line)) continue;
+    if (/^Identify the choice/i.test(line)) continue;
+    if (/^_{3,}$/.test(line)) continue;
+    
+    // Strip leading underscores (ExamView Test blank answer lines: "____ 1.")
+    line = line.replace(/^_+\s*/, '');
+    if (!line) continue;
     
     // Skip lines that are mostly hex data (leftover from images)
     // If line is > 80% hex characters and longer than 20 chars, skip it
@@ -553,20 +713,51 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
     // Clean multiple [GAMBAR] markers into one
     line = line.replace(/(\[GAMBAR\]\s*)+/g, '[GAMBAR] ');
     
-    // If line is just "a." through "e.", merge with next line
-    if (/^[a-e]\.$/.test(line) && i + 1 < rawLines.length) {
-      const nextLine = rawLines[i + 1].trim();
-      if (nextLine && nextLine !== 'd') {
-        line = line + ' ' + nextLine;
-        i++; // Skip next line since we merged
+    // If line is just "a." through "e." (or "a)" etc), merge with ALL following
+    // continuation lines until we hit another pattern (option, question, marker)
+    if (/^[a-eA-E][.)]$/.test(line)) {
+      let merged = line;
+      while (i + 1 < rawLines.length) {
+        const nextLine = rawLines[i + 1].trim();
+        // Stop merging if next line is empty, another option letter, a question number, or a marker
+        if (!nextLine) break;
+        if (/^[a-eA-E][.)]/.test(nextLine)) break;
+        if (/^_*\s*\d+[.)]\s/.test(nextLine)) break;
+        if (/^(ANS|ANSWER|JAWABAN|KUNCI|MULTIPLE|ESSAY|URAIAN|SHORT|ANSWER\s*KEY)/i.test(nextLine)) break;
+        merged = merged + ' ' + nextLine;
+        i++;
+      }
+      line = merged;
+    }
+    
+    // Merge continuation lines (lines that don't start with a recognized pattern)
+    // into the previous line — handles word-wrapped text from RTF
+    if (cleanLines.length > 0 && line.length > 0) {
+      const prevLine = cleanLines[cleanLines.length - 1];
+      const isOptionStart = /^[a-eA-E][.)]\s/.test(line);
+      const isQuestionStart = /^\d+[.)]\s/.test(line);
+      const isMarker = /^(ANS|ANSWER|JAWABAN|KUNCI|MULTIPLE|ESSAY|URAIAN|SHORT|PTS|\[IMG_|\[GAMBAR)/i.test(line);
+      const prevIsOrphanOption = /^[a-eA-E][.)]$/.test(prevLine);
+      
+      // If current line doesn't start with any known pattern, it's a continuation
+      if (!isOptionStart && !isQuestionStart && !isMarker && !prevIsOrphanOption) {
+        // Check if previous line looks like it was cut mid-sentence
+        const prevEndsClean = /[.?!:;,\)]$/.test(prevLine);
+        if (!prevEndsClean && prevLine.length > 0) {
+          cleanLines[cleanLines.length - 1] = prevLine + line;
+          continue;
+        }
       }
     }
     
     cleanLines.push(line);
   }
   
-  // Step 10: Final cleanup
+  // Step 10: Join and split inline options (dynamic N-column support)
   text = cleanLines.join('\n');
+  text = splitInlineOptions(text);
+  
+  // Step 11: Final cleanup
   text = text.replace(/\n{3,}/g, '\n\n');
   
   // Final: merge consecutive [GAMBAR] into one
