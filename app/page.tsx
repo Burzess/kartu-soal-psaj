@@ -444,7 +444,7 @@ export default function Home() {
                     onClick={handleReset}
                     className="px-6 py-3 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition-colors shadow-md"
                   >
-                    Upload Lagi
+                    Upload Ulang Soal
                   </button>
                   {/* <button
                     onClick={handlePrint}
@@ -452,13 +452,15 @@ export default function Home() {
                   >
                     Print
                   </button> */}
-                  <button
-                    onClick={handleExportPDF}
-                    disabled={isExporting}
-                    className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-md"
-                  >
-                    {isExporting ? 'Membuat Kartu Soal...' : 'Download Kartu Soal'}
-                  </button>
+                  {!showKunciJawaban && (
+                    <button
+                      onClick={handleExportPDF}
+                      disabled={isExporting}
+                      className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-md"
+                    >
+                      {isExporting ? 'Membuat Kartu Soal...' : 'Download Kartu Soal'}
+                    </button>
+                  )}
                   {/* <button
                     onClick={handlePreviewPDF}
                     disabled={isExporting}
