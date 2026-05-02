@@ -3,6 +3,7 @@
 import React from 'react';
 import { Question, ExtractedImage } from '@/lib/parser';
 import { KisiKisiItem } from '@/lib/kisi-parser';
+import Image from 'next/image';
 
 interface KartuSoalEssayProps {
   question: Question;
@@ -51,7 +52,7 @@ function renderTextWithImages(text: string, images?: ExtractedImage[]): React.Re
         const img = images.find(i => i.id === imgId);
         if (img && (img.format === 'png' || img.format === 'jpeg')) {
           parts.push(
-            <img 
+            <Image 
               key={`${imgId}-${match.index}-${lineIndex}`}
               src={img.data} 
               alt={`Gambar ${imgId}`}

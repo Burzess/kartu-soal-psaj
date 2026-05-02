@@ -46,7 +46,7 @@ export default function KisiKisiUpload({ onParsed }: KisiKisiUploadProps) {
         </h3>
         
         <p className="text-xs text-gray-600 mb-3">
-          Upload file Excel dengan sheet KISI_MASTER untuk mengisi CP, TP, ATP, Indikator
+          Upload file Excel dengan sheet yang memiliki header CP, TP, ATP, Indikator
         </p>
 
         <input

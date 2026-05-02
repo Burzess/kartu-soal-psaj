@@ -351,7 +351,7 @@ export default function Home() {
         {/* Header */}
         <div className="text-center mb-12 print:hidden">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            Kartu Soal
+            Generator Kartu Soal dan Kunci Jawaban
           </h1>
           {/* <p className="text-gray-600">
             Upload file soal atau paste langsung untuk membuat kartu soal

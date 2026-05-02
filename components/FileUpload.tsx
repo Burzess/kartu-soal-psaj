@@ -150,9 +150,9 @@ export default function FileUpload({ onParsed }: FileUploadProps) {
         <p className="mt-4 text-lg font-semibold text-gray-900">
           Drop file soal disini atau klik untuk pilih file
         </p>
-        <p className="mt-2 text-base font-medium text-gray-700">
+        {/* <p className="mt-2 text-base font-medium text-gray-700">
           Support: .txt, .rtf, .doc (max 10MB)
-        </p>
+        </p> */}
       </div>
 
       {/* OR Divider */}
