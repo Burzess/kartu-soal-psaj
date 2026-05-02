@@ -41,8 +41,8 @@ export default function KisiKisiUpload({ onParsed }: KisiKisiUploadProps) {
   return (
     <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-4">
       <div className="text-center">
-        <h3 className="text-sm font-semibold text-gray-900 mb-2">
-          Upload Kisi-Kisi
+        <h3 className="text-2xl font-semibold text-gray-900 mb-2">
+          Upload File Excel Kisi-Kisi
         </h3>
         
         <p className="text-xs text-gray-600 mb-3">
