@@ -11,10 +11,13 @@ import { KisiKisiData, KisiKisiItem } from '@/lib/kisi-parser';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
+type ExamType = 'PSAJ' | 'KAK' | 'PAS';
+
 export default function Home() {
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [kisiKisiData, setKisiKisiData] = useState<KisiKisiData | null>(null);
   const [showKunciJawaban, setShowKunciJawaban] = useState(false);
+  const [examType, setExamType] = useState<ExamType | ''>('');
   const [metadata, setMetadata] = useState({
     namaSekolah: 'SMK 45 Surabaya',
     mataPelajaran: '',
@@ -24,11 +27,12 @@ export default function Home() {
     tahunPelajaran: '2025 / 2026'
   });
   const [isExporting, setIsExporting] = useState(false);
+  const examTypeOptions: ExamType[] = ['PSAJ', 'KAK', 'PAS'];
   const metadataLabels: Record<keyof typeof metadata, string> = {
     namaSekolah: 'Nama Sekolah',
     mataPelajaran: 'Mata Pelajaran',
     kurikulum: 'Kurikulum',
-    kelasUjian: 'Kelas / Ujian',
+    kelasUjian: 'Kelas',
     penyusun: 'Penyusun',
     tahunPelajaran: 'Tahun Pelajaran'
   };
@@ -174,6 +178,11 @@ export default function Home() {
   };
 
   const handleParsed = (result: ParseResult) => {
+    if (!examType) {
+      alert('Pilih jenis ujian (PSAJ, KAK, atau PAS) sebelum upload file RTF.');
+      return;
+    }
+
     if (result.errors.length > 0) {
       console.error('[DEBUG][PARSE][RESULT] Ditemukan error setelah parse', {
         totalQuestions: result.questions.length,
@@ -228,7 +237,6 @@ export default function Home() {
   //   }
   // };
 
-  // GANTI handleExportPDF
   const handleExportPDF = () => {
     if (!ensureMetadataComplete('kartu soal')) return;
 
@@ -241,7 +249,6 @@ export default function Home() {
     }, 100);
   };
 
-  // GANTI handleExportKunciJawaban
   const handleExportKunciJawaban = () => {
     if (!ensureMetadataComplete('kunci jawaban')) return;
 
@@ -393,14 +400,48 @@ export default function Home() {
 
         {/* Main Content */}
         {!parseResult ? (
-          <div className="bg-white rounded-xl shadow-lg p-8">
-            <FileUpload onParsed={handleParsed} />
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-lg p-6 print:hidden">
+              <h2 className="text-xl font-bold mb-4 text-gray-900">Pilih Jenis Generate Kartu Soal</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {examTypeOptions.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setExamType(type)}
+                    className={`px-4 py-3 rounded-lg border-2 font-semibold transition-colors ${
+                      examType === type
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-blue-400'
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-3 text-sm font-medium text-gray-600">
+                Guru wajib memilih jenis ujian terlebih dahulu sebelum upload file <span className="font-bold">.rtf</span>.
+              </p>
+            </div>
+
+            <div className={`bg-white rounded-xl shadow-lg p-8 ${examType ? '' : 'opacity-60'}`}>
+              {examType ? (
+                <FileUpload onParsed={handleParsed} />
+              ) : (
+                <div className="py-10 text-center">
+                  <p className="text-lg font-semibold text-gray-700">Pilih jenis ujian untuk membuka upload file RTF.</p>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="space-y-6">
             {/* Metadata Form */}
             <div className="bg-white rounded-xl shadow-lg p-6 print:hidden">
               <h2 className="text-xl font-bold mb-4 text-gray-900">Informasi Kartu Soal</h2>
+              <p className="mb-4 text-sm font-semibold text-blue-700">
+                Jenis Ujian: <span className="text-blue-900">{examType || '-'}</span>
+              </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <input
                   id="nama-sekolah"
@@ -436,7 +477,7 @@ export default function Home() {
                   id="kelas-ujian"
                   name="kelasUjian"
                   type="text"
-                  placeholder="Kelas / Ujian (contoh: XII / PSAJ)"
+                  placeholder="Kelas (contoh: XII)"
                   value={metadata.kelasUjian}
                   onChange={(e) => setMetadata({ ...metadata, kelasUjian: e.target.value })}
                   className={metadataInputClass('kelasUjian')}
@@ -547,6 +588,7 @@ export default function Home() {
                 <KunciJawaban
                   questions={parseResult.questions}
                   metadata={metadata}
+                  examType={examType || 'PSAJ'}
                   skorPerSoal={1.5}
                   images={parseResult.images}
                 />
@@ -559,6 +601,7 @@ export default function Home() {
                       <KartuSoalEssay
                         question={question}
                         metadata={metadata}
+                        examType={examType || 'PSAJ'}
                         images={parseResult.images}
                         kisiKisi={getKisiKisi(question.number)}
                       />
@@ -566,6 +609,7 @@ export default function Home() {
                       <KartuSoal
                         question={question}
                         metadata={metadata}
+                        examType={examType || 'PSAJ'}
                         images={parseResult.images}
                         kisiKisi={getKisiKisi(question.number)}
                       />

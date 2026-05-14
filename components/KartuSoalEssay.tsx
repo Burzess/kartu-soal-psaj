@@ -5,6 +5,8 @@ import { Question, ExtractedImage } from '@/lib/parser';
 import { KisiKisiItem } from '@/lib/kisi-parser';
 import Image from 'next/image';
 
+type ExamType = 'PSAJ' | 'KAK' | 'PAS';
+
 interface KartuSoalEssayProps {
   question: Question;
   metadata?: {
@@ -17,6 +19,7 @@ interface KartuSoalEssayProps {
   };
   images?: ExtractedImage[];
   kisiKisi?: KisiKisiItem;
+  examType: ExamType;
 }
 
 // Helper to render text with image placeholders and preserve line breaks/lists
@@ -107,7 +110,7 @@ function renderTextWithImages(text: string, images?: ExtractedImage[]): React.Re
   );
 }
 
-export default function KartuSoalEssay({ question, metadata, images, kisiKisi }: KartuSoalEssayProps) {
+export default function KartuSoalEssay({ question, metadata, images, kisiKisi, examType }: KartuSoalEssayProps) {
   // Labels and their corresponding kisi-kisi values
   const labelData = [
     { label: 'Capaian Pembelajaran', value: kisiKisi?.capaianPembelajaran || '' },
@@ -119,6 +122,7 @@ export default function KartuSoalEssay({ question, metadata, images, kisiKisi }:
   ];
 
   const jawabanText = question.answer || '(Belum ada jawaban)';
+  const kelasDanUjian = metadata?.kelasUjian ? `${metadata.kelasUjian} / ${examType}` : '-';
 
   return (
     <div className="mt-10 w-full bg-white border-2 border-black print:border-black print:break-after-page text-black text-[12px] leading-normal" style={{ backgroundColor: '#ffffff' }}>
@@ -142,7 +146,7 @@ export default function KartuSoalEssay({ question, metadata, images, kisiKisi }:
           </div>
           <div className="flex">
             <span className="w-36 font-bold">Kelas / Ujian</span>
-            <span>: {metadata?.kelasUjian || '-'}</span>
+            <span>: {kelasDanUjian}</span>
           </div>
         </div>
 

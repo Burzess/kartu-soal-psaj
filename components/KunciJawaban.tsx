@@ -3,8 +3,11 @@
 import React from 'react';
 import { Question, ExtractedImage } from '@/lib/parser';
 
+type ExamType = 'PSAJ' | 'KAK' | 'PAS';
+
 interface KunciJawabanProps {
   questions: Question[];
+  examType: ExamType;
   metadata?: {
     namaSekolah?: string;
     mataPelajaran?: string;
@@ -57,9 +60,14 @@ function renderTextWithImages(text: string, images?: ExtractedImage[]): React.Re
   );
 }
 
-export default function KunciJawaban({ questions, metadata, skorPerSoal = 1.5, images }: KunciJawabanProps) {
+export default function KunciJawaban({ questions, examType, metadata, skorPerSoal = 1.5, images }: KunciJawabanProps) {
   const pgQuestions = questions.filter(q => q.type === 'PG');
   const essayQuestions = questions.filter(q => q.type === 'URAIAN');
+  const examHeaderByType: Record<ExamType, string> = {
+    PSAJ: 'PENILAIAN SUMATIF AKHIR JENJANG (PSAJ)',
+    KAK: 'UJIAN KAK',
+    PAS: 'PENILAIAN AKHIR SEMESTER (PAS)'
+  };
   
   const hasPG = pgQuestions.length > 0;
   const hasEssay = essayQuestions.length > 0;
@@ -78,7 +86,7 @@ export default function KunciJawaban({ questions, metadata, skorPerSoal = 1.5, i
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className="font-bold text-[32px] mb-3">KUNCI JAWABAN & PEDOMAN PENILAIAN</h1>
-        <h2 className="font-bold text-[26px] mb-2">PENILAIAN SUMATIF AKHIR JENJANG (PSAJ)</h2>
+        {/* <h2 className="font-bold text-[26px] mb-2">{examHeaderByType[examType]}</h2> */}
         <h2 className="font-bold text-[26px] mb-2">TAHUN PELAJARAN {metadata?.tahunPelajaran || '2025/2026'}</h2>
         <h2 className="font-bold text-[26px]">MAPEL {(metadata?.mataPelajaran || '-').toUpperCase()}</h2>
       </div>
