@@ -24,6 +24,34 @@ export default function Home() {
     tahunPelajaran: '2025 / 2026'
   });
   const [isExporting, setIsExporting] = useState(false);
+  const metadataLabels: Record<keyof typeof metadata, string> = {
+    namaSekolah: 'Nama Sekolah',
+    mataPelajaran: 'Mata Pelajaran',
+    kurikulum: 'Kurikulum',
+    kelasUjian: 'Kelas / Ujian',
+    penyusun: 'Penyusun',
+    tahunPelajaran: 'Tahun Pelajaran'
+  };
+  const requiredMetadataFields = Object.keys(metadataLabels) as Array<keyof typeof metadata>;
+  const missingMetadataFields = requiredMetadataFields.filter((field) => metadata[field].trim() === '');
+  const isMetadataComplete = missingMetadataFields.length === 0;
+
+  const ensureMetadataComplete = (downloadTarget: string) => {
+    if (isMetadataComplete) return true;
+
+    const missingFieldsText = missingMetadataFields
+      .map((field) => `- ${metadataLabels[field]}`)
+      .join('\n');
+    alert(`Sebelum download ${downloadTarget}, lengkapi metadata berikut:\n${missingFieldsText}`);
+    return false;
+  };
+
+  const metadataInputClass = (field: keyof typeof metadata) =>
+    `px-4 py-3 border-2 rounded-lg text-gray-900 font-medium placeholder-gray-500 bg-white ${
+      missingMetadataFields.includes(field)
+        ? 'border-red-500 focus:ring-2 focus:ring-red-500 focus:border-red-500'
+        : 'border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+    }`;
 
   // Helper to get kisi-kisi for a specific question number
   const getKisiKisi = (questionNumber: number): KisiKisiItem | undefined => {
@@ -202,6 +230,8 @@ export default function Home() {
 
   // GANTI handleExportPDF
   const handleExportPDF = () => {
+    if (!ensureMetadataComplete('kartu soal')) return;
+
     // Pastikan kita tidak di tampilan kunci jawaban
     if (showKunciJawaban) setShowKunciJawaban(false);
 
@@ -213,6 +243,8 @@ export default function Home() {
 
   // GANTI handleExportKunciJawaban
   const handleExportKunciJawaban = () => {
+    if (!ensureMetadataComplete('kunci jawaban')) return;
+
     // Pastikan kita berada di tampilan kunci jawaban
     if (!showKunciJawaban) setShowKunciJawaban(true);
 
@@ -223,6 +255,7 @@ export default function Home() {
 
   const handlePreviewPDF = async () => {
     if (!parseResult || parseResult.questions.length === 0) return;
+    if (!ensureMetadataComplete('kartu soal')) return;
 
     setIsExporting(true);
 
@@ -353,9 +386,9 @@ export default function Home() {
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
             Generator Kartu Soal dan Kunci Jawaban
           </h1>
-          {/* <p className="text-gray-600">
-            Upload file soal atau paste langsung untuk membuat kartu soal
-          </p> */}
+          <p className="text-gray-600">
+            Generate by <a href="https://limmm.my.id" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 font-semibold underline">Halim</a> | Untuk kebutuhan Perangkat Ujian SMK 45 Surabaya
+          </p>
         </div>
 
         {/* Main Content */}
@@ -376,7 +409,8 @@ export default function Home() {
                   placeholder="Nama Sekolah"
                   value={metadata.namaSekolah}
                   onChange={(e) => setMetadata({ ...metadata, namaSekolah: e.target.value })}
-                  className="px-4 py-3 border-2 border-gray-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 font-medium placeholder-gray-500 bg-white"
+                  className={metadataInputClass('namaSekolah')}
+                  required
                 />
                 <input
                   id="mata-pelajaran"
@@ -385,7 +419,8 @@ export default function Home() {
                   placeholder="Mata Pelajaran"
                   value={metadata.mataPelajaran}
                   onChange={(e) => setMetadata({ ...metadata, mataPelajaran: e.target.value })}
-                  className="px-4 py-3 border-2 border-gray-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 font-medium placeholder-gray-500 bg-white"
+                  className={metadataInputClass('mataPelajaran')}
+                  required
                 />
                 <input
                   id="kurikulum"
@@ -394,7 +429,8 @@ export default function Home() {
                   placeholder="Kurikulum"
                   value={metadata.kurikulum}
                   onChange={(e) => setMetadata({ ...metadata, kurikulum: e.target.value })}
-                  className="px-4 py-3 border-2 border-gray-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 font-medium placeholder-gray-500 bg-white"
+                  className={metadataInputClass('kurikulum')}
+                  required
                 />
                 <input
                   id="kelas-ujian"
@@ -403,7 +439,8 @@ export default function Home() {
                   placeholder="Kelas / Ujian (contoh: XII / PSAJ)"
                   value={metadata.kelasUjian}
                   onChange={(e) => setMetadata({ ...metadata, kelasUjian: e.target.value })}
-                  className="px-4 py-3 border-2 border-gray-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 font-medium placeholder-gray-500 bg-white"
+                  className={metadataInputClass('kelasUjian')}
+                  required
                 />
                 <input
                   id="penyusun"
@@ -412,7 +449,8 @@ export default function Home() {
                   placeholder="Penyusun"
                   value={metadata.penyusun}
                   onChange={(e) => setMetadata({ ...metadata, penyusun: e.target.value })}
-                  className="px-4 py-3 border-2 border-gray-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 font-medium placeholder-gray-500 bg-white"
+                  className={metadataInputClass('penyusun')}
+                  required
                 />
                 <input
                   id="tahun-pelajaran"
@@ -421,9 +459,15 @@ export default function Home() {
                   placeholder="Tahun Pelajaran"
                   value={metadata.tahunPelajaran}
                   onChange={(e) => setMetadata({ ...metadata, tahunPelajaran: e.target.value })}
-                  className="px-4 py-3 border-2 border-gray-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 font-medium placeholder-gray-500 bg-white"
+                  className={metadataInputClass('tahunPelajaran')}
+                  required
                 />
               </div>
+              {!isMetadataComplete && (
+                <p className="mt-3 text-sm font-semibold text-red-600">
+                  Lengkapi semua metadata terlebih dahulu sebelum download kartu soal atau kunci jawaban.
+                </p>
+              )}
             </div>
 
             {/* Status & Actions */}

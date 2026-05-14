@@ -138,7 +138,7 @@ export default function FileUpload({ onParsed }: FileUploadProps) {
           name="soalFile"
           ref={fileInputRef}
           type="file"
-          accept=".txt,.rtf,.doc"
+          accept=".rtf"
           onChange={handleFileSelect}
           className="hidden"
         />
@@ -148,11 +148,8 @@ export default function FileUpload({ onParsed }: FileUploadProps) {
         </svg>
         
         <p className="mt-4 text-lg font-semibold text-gray-900">
-          Drop file soal disini atau klik untuk pilih file
+          Drop file soal yang telah di export ke <span className="font-bold text-blue-600 underline">RTF</span> disini atau <span className="text-blue-600 hover:text-blue-800 cursor-pointer">klik untuk pilih file</span>
         </p>
-        {/* <p className="mt-2 text-base font-medium text-gray-700">
-          Support: .txt, .rtf, .doc (max 10MB)
-        </p> */}
       </div>
 
       {/* OR Divider */}

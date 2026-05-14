@@ -78,7 +78,7 @@ export default function KunciJawaban({ questions, metadata, skorPerSoal = 1.5, i
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className="font-bold text-[32px] mb-3">KUNCI JAWABAN & PEDOMAN PENILAIAN</h1>
-        {/* <h2 className="font-bold text-[26px] mb-2">PENILAIAN SUMATIF AKHIR JENJANG (PSAJ)</h2> */}
+        <h2 className="font-bold text-[26px] mb-2">PENILAIAN SUMATIF AKHIR JENJANG (PSAJ)</h2>
         <h2 className="font-bold text-[26px] mb-2">TAHUN PELAJARAN {metadata?.tahunPelajaran || '2025/2026'}</h2>
         <h2 className="font-bold text-[26px]">MAPEL {(metadata?.mataPelajaran || '-').toUpperCase()}</h2>
       </div>
