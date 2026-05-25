@@ -56,8 +56,8 @@ export function parseTextToQuestions(text: string): ParseResult {
     // Skip empty lines
     if (!line) continue;
     
-    // Detect section markers
-    if (/ESSAY|URAIAN|SHORT ANSWER/i.test(line)) {
+    // Detect section markers - must be standalone lines (not part of question/option text)
+    if (/^(ESSAY|URAIAN|SHORT\s*ANSWER)\s*$/i.test(line)) {
       if (currentQuestion && currentQuestion.number) {
         if (isUraianMode || validateQuestion(currentQuestion) || validateQuestionPartial(currentQuestion)) {
           questions.push(finalizeQuestion(currentQuestion));
