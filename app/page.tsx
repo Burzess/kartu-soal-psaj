@@ -50,6 +50,12 @@ export default function Home() {
     return false;
   };
 
+  const ensureKisiKisiUploaded = (): boolean => {
+    if (kisiKisiData !== null) return true;
+    alert('Sebelum download kartu soal, upload kisi-kisi terlebih dahulu.');
+    return false;
+  };
+
   const metadataInputClass = (field: keyof typeof metadata) =>
     `px-4 py-3 border-2 rounded-lg text-gray-900 font-medium placeholder-gray-500 bg-white ${
       missingMetadataFields.includes(field)
@@ -238,6 +244,7 @@ export default function Home() {
   // };
 
   const handleExportPDF = () => {
+    if (!ensureKisiKisiUploaded()) return;
     if (!ensureMetadataComplete('kartu soal')) return;
 
     // Pastikan kita tidak di tampilan kunci jawaban
@@ -541,7 +548,12 @@ export default function Home() {
                     <button
                       onClick={handleExportPDF}
                       disabled={isExporting}
-                      className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-md"
+                      className={`px-6 py-3 font-semibold rounded-lg transition-colors shadow-md ${
+                        kisiKisiData
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'bg-blue-300 text-white cursor-not-allowed'
+                      } disabled:bg-gray-400 disabled:cursor-not-allowed`}
+                      title={!kisiKisiData ? 'Upload kisi-kisi terlebih dahulu' : undefined}
                     >
                       {isExporting ? 'Membuat Kartu Soal...' : 'Download Kartu Soal'}
                     </button>
