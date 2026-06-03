@@ -93,10 +93,27 @@ export function parseTextToQuestions(text: string): ParseResult {
     const questionMatch = cleanedLine.match(/^(\d+)[.)]\s+(.+)$/);
     if (questionMatch) {
       const detectedNumber = parseInt(questionMatch[1]);
+      const usesParenSeparator = cleanedLine.charAt(questionMatch[1].length) === ')';
+
+      // Heuristic: if the current question has text but no options yet,
+      // and the numbered line uses ")" as separator (e.g. "1) mengajak...", "2) memilih..."),
+      // treat it as a sub-item within the question body, not a new question.
+      const isLikelySubItem = currentQuestion &&
+        currentState === 'question' &&
+        currentQuestion.text &&
+        usesParenSeparator &&
+        !isUraianMode &&
+        // Only treat as sub-item if current question has no options filled yet
+        currentQuestion.options &&
+        !currentQuestion.options.a &&
+        !currentQuestion.options.b;
+
       const canStartNewQuestion =
-        !currentQuestion ||
-        detectedNumber > (currentQuestion.number || 0) ||
-        (allowNumberReset && detectedNumber === 1);
+        !isLikelySubItem && (
+          !currentQuestion ||
+          detectedNumber > (currentQuestion.number || 0) ||
+          (allowNumberReset && detectedNumber === 1)
+        );
 
       if (canStartNewQuestion) {
         // Save previous question if exists
@@ -121,7 +138,7 @@ export function parseTextToQuestions(text: string): ParseResult {
         continue;
       }
 
-      // Numbered lines inside question body
+      // Numbered lines inside question body (sub-items or continuation)
       if (currentQuestion && currentState === 'question') {
         currentQuestion.text = `${currentQuestion.text || ''}\n${line}`.trim();
       } else if (currentQuestion && currentQuestion.options && currentState === 'options' && !isUraianMode) {
