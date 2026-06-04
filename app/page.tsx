@@ -450,6 +450,7 @@ export default function Home() {
                 Jenis Ujian: <span className="text-blue-900">{examType || '-'}</span>
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <label htmlFor="nama-sekolah">Nama Sekolah</label>
                 <input
                   id="nama-sekolah"
                   name="namaSekolah"
@@ -460,6 +461,7 @@ export default function Home() {
                   className={metadataInputClass('namaSekolah')}
                   required
                 />
+                <label htmlFor="mata-pelajaran">Mata Pelajaran</label>
                 <input
                   id="mata-pelajaran"
                   name="mataPelajaran"
@@ -470,6 +472,7 @@ export default function Home() {
                   className={metadataInputClass('mataPelajaran')}
                   required
                 />
+                <label htmlFor="kurikulum">Kurikulum</label>
                 <input
                   id="kurikulum"
                   name="kurikulum"
@@ -480,6 +483,7 @@ export default function Home() {
                   className={metadataInputClass('kurikulum')}
                   required
                 />
+                <label htmlFor="kelas-ujian">Kelas</label>
                 <input
                   id="kelas-ujian"
                   name="kelasUjian"
@@ -490,6 +494,7 @@ export default function Home() {
                   className={metadataInputClass('kelasUjian')}
                   required
                 />
+                <label htmlFor="penyusun">Penyusun</label>
                 <input
                   id="penyusun"
                   name="penyusun"
@@ -500,6 +505,7 @@ export default function Home() {
                   className={metadataInputClass('penyusun')}
                   required
                 />
+                <label htmlFor="tahun-pelajaran">Tahun Pelajaran</label>
                 <input
                   id="tahun-pelajaran"
                   name="tahunPelajaran"
