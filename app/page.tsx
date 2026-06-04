@@ -57,10 +57,9 @@ export default function Home() {
   };
 
   const metadataInputClass = (field: keyof typeof metadata) =>
-    `px-4 py-3 border-2 rounded-lg text-gray-900 font-medium placeholder-gray-500 bg-white ${
-      missingMetadataFields.includes(field)
-        ? 'border-red-500 focus:ring-2 focus:ring-red-500 focus:border-red-500'
-        : 'border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+    `px-4 py-3 border-2 rounded-lg text-gray-900 font-medium placeholder-gray-500 bg-white ${missingMetadataFields.includes(field)
+      ? 'border-red-500 focus:ring-2 focus:ring-red-500 focus:border-red-500'
+      : 'border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
     }`;
 
   // Helper to get kisi-kisi for a specific question number
@@ -416,11 +415,10 @@ export default function Home() {
                     key={type}
                     type="button"
                     onClick={() => setExamType(type)}
-                    className={`px-4 py-3 rounded-lg border-2 font-semibold transition-colors ${
-                      examType === type
+                    className={`px-4 py-3 rounded-lg border-2 font-semibold transition-colors ${examType === type
                         ? 'border-blue-600 bg-blue-600 text-white'
                         : 'border-gray-300 bg-white text-gray-700 hover:border-blue-400'
-                    }`}
+                      }`}
                   >
                     {type}
                   </button>
@@ -446,81 +444,110 @@ export default function Home() {
             {/* Metadata Form */}
             <div className="bg-white rounded-xl shadow-lg p-6 print:hidden">
               <h2 className="text-xl font-bold mb-4 text-gray-900">Informasi Kartu Soal</h2>
-              <p className="mb-4 text-sm font-semibold text-blue-700">
+              <p className="mb-6 text-sm font-semibold text-blue-700">
                 Jenis Ujian: <span className="text-blue-900">{examType || '-'}</span>
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <label htmlFor="nama-sekolah">Nama Sekolah</label>
-                <input
-                  id="nama-sekolah"
-                  name="namaSekolah"
-                  type="text"
-                  placeholder="Nama Sekolah"
-                  value={metadata.namaSekolah}
-                  onChange={(e) => setMetadata({ ...metadata, namaSekolah: e.target.value })}
-                  className={metadataInputClass('namaSekolah')}
-                  required
-                />
-                <label htmlFor="mata-pelajaran">Mata Pelajaran</label>
-                <input
-                  id="mata-pelajaran"
-                  name="mataPelajaran"
-                  type="text"
-                  placeholder="Mata Pelajaran"
-                  value={metadata.mataPelajaran}
-                  onChange={(e) => setMetadata({ ...metadata, mataPelajaran: e.target.value })}
-                  className={metadataInputClass('mataPelajaran')}
-                  required
-                />
-                <label htmlFor="kurikulum">Kurikulum</label>
-                <input
-                  id="kurikulum"
-                  name="kurikulum"
-                  type="text"
-                  placeholder="Kurikulum"
-                  value={metadata.kurikulum}
-                  onChange={(e) => setMetadata({ ...metadata, kurikulum: e.target.value })}
-                  className={metadataInputClass('kurikulum')}
-                  required
-                />
-                <label htmlFor="kelas-ujian">Kelas</label>
-                <input
-                  id="kelas-ujian"
-                  name="kelasUjian"
-                  type="text"
-                  placeholder="Kelas (contoh: XII)"
-                  value={metadata.kelasUjian}
-                  onChange={(e) => setMetadata({ ...metadata, kelasUjian: e.target.value })}
-                  className={metadataInputClass('kelasUjian')}
-                  required
-                />
-                <label htmlFor="penyusun">Penyusun</label>
-                <input
-                  id="penyusun"
-                  name="penyusun"
-                  type="text"
-                  placeholder="Penyusun"
-                  value={metadata.penyusun}
-                  onChange={(e) => setMetadata({ ...metadata, penyusun: e.target.value })}
-                  className={metadataInputClass('penyusun')}
-                  required
-                />
-                <label htmlFor="tahun-pelajaran">Tahun Pelajaran</label>
-                <input
-                  id="tahun-pelajaran"
-                  name="tahunPelajaran"
-                  type="text"
-                  placeholder="Tahun Pelajaran"
-                  value={metadata.tahunPelajaran}
-                  onChange={(e) => setMetadata({ ...metadata, tahunPelajaran: e.target.value })}
-                  className={metadataInputClass('tahunPelajaran')}
-                  required
-                />
+
+              {/* Jarak antar kolom grid diperlebar menjadi gap-6 untuk ruang bernapas yang lebih baik */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                {/* Form Group 1 */}
+                <div className="flex flex-col space-y-1.5">
+                  <label htmlFor="nama-sekolah" className="text-sm font-medium text-gray-700">Nama Sekolah</label>
+                  <input
+                    id="nama-sekolah"
+                    name="namaSekolah"
+                    type="text"
+                    placeholder="Nama Sekolah"
+                    value={metadata.namaSekolah}
+                    onChange={(e) => setMetadata({ ...metadata, namaSekolah: e.target.value })}
+                    className={`px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${metadataInputClass('namaSekolah')}`}
+                    required
+                  />
+                </div>
+
+                {/* Form Group 2 */}
+                <div className="flex flex-col space-y-1.5">
+                  <label htmlFor="mata-pelajaran" className="text-sm font-medium text-gray-700">Mata Pelajaran</label>
+                  <input
+                    id="mata-pelajaran"
+                    name="mataPelajaran"
+                    type="text"
+                    placeholder="Mata Pelajaran"
+                    value={metadata.mataPelajaran}
+                    onChange={(e) => setMetadata({ ...metadata, mataPelajaran: e.target.value })}
+                    className={`px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${metadataInputClass('mataPelajaran')}`}
+                    required
+                  />
+                </div>
+
+                {/* Form Group 3 */}
+                <div className="flex flex-col space-y-1.5">
+                  <label htmlFor="kurikulum" className="text-sm font-medium text-gray-700">Kurikulum</label>
+                  <input
+                    id="kurikulum"
+                    name="kurikulum"
+                    type="text"
+                    placeholder="Kurikulum"
+                    value={metadata.kurikulum}
+                    onChange={(e) => setMetadata({ ...metadata, kurikulum: e.target.value })}
+                    className={`px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${metadataInputClass('kurikulum')}`}
+                    required
+                  />
+                </div>
+
+                {/* Form Group 4 */}
+                <div className="flex flex-col space-y-1.5">
+                  <label htmlFor="kelas-ujian" className="text-sm font-medium text-gray-700">Kelas</label>
+                  <input
+                    id="kelas-ujian"
+                    name="kelasUjian"
+                    type="text"
+                    placeholder="Kelas (contoh: XII)"
+                    value={metadata.kelasUjian}
+                    onChange={(e) => setMetadata({ ...metadata, kelasUjian: e.target.value })}
+                    className={`px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${metadataInputClass('kelasUjian')}`}
+                    required
+                  />
+                </div>
+
+                {/* Form Group 5 */}
+                <div className="flex flex-col space-y-1.5">
+                  <label htmlFor="penyusun" className="text-sm font-medium text-gray-700">Penyusun</label>
+                  <input
+                    id="penyusun"
+                    name="penyusun"
+                    type="text"
+                    placeholder="Penyusun"
+                    value={metadata.penyusun}
+                    onChange={(e) => setMetadata({ ...metadata, penyusun: e.target.value })}
+                    className={`px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${metadataInputClass('penyusun')}`}
+                    required
+                  />
+                </div>
+
+                {/* Form Group 6 */}
+                <div className="flex flex-col space-y-1.5">
+                  <label htmlFor="tahun-pelajaran" className="text-sm font-medium text-gray-700">Tahun Pelajaran</label>
+                  <input
+                    id="tahun-pelajaran"
+                    name="tahunPelajaran"
+                    type="text"
+                    placeholder="Tahun Pelajaran"
+                    value={metadata.tahunPelajaran}
+                    onChange={(e) => setMetadata({ ...metadata, tahunPelajaran: e.target.value })}
+                    className={`px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${metadataInputClass('tahunPelajaran')}`}
+                    required
+                  />
+                </div>
               </div>
+
               {!isMetadataComplete && (
-                <p className="mt-3 text-sm font-semibold text-red-600">
-                  Lengkapi semua metadata terlebih dahulu sebelum download kartu soal atau kunci jawaban.
-                </p>
+                <div className="mt-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg">
+                  <p className="text-sm font-semibold text-red-700">
+                    Lengkapi semua metadata terlebih dahulu sebelum mengunduh kartu soal atau kunci jawaban.
+                  </p>
+                </div>
               )}
             </div>
 
@@ -554,11 +581,10 @@ export default function Home() {
                     <button
                       onClick={handleExportPDF}
                       disabled={isExporting}
-                      className={`px-6 py-3 font-semibold rounded-lg transition-colors shadow-md ${
-                        kisiKisiData
+                      className={`px-6 py-3 font-semibold rounded-lg transition-colors shadow-md ${kisiKisiData
                           ? 'bg-blue-600 text-white hover:bg-blue-700'
                           : 'bg-blue-300 text-white cursor-not-allowed'
-                      } disabled:bg-gray-400 disabled:cursor-not-allowed`}
+                        } disabled:bg-gray-400 disabled:cursor-not-allowed`}
                       title={!kisiKisiData ? 'Upload kisi-kisi terlebih dahulu' : undefined}
                     >
                       {isExporting ? 'Membuat Kartu Soal...' : 'Download Kartu Soal'}
