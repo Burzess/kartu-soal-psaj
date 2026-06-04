@@ -518,7 +518,7 @@ export default function Home() {
                     id="penyusun"
                     name="penyusun"
                     type="text"
-                    placeholder="Penyusun"
+                    placeholder="Penyusun (contoh: Mas Ibrahim Halim S.Kom)"
                     value={metadata.penyusun}
                     onChange={(e) => setMetadata({ ...metadata, penyusun: e.target.value })}
                     className={`px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${metadataInputClass('penyusun')}`}
@@ -533,7 +533,7 @@ export default function Home() {
                     id="tahun-pelajaran"
                     name="tahunPelajaran"
                     type="text"
-                    placeholder="Tahun Pelajaran"
+                    placeholder="Tahun Pelajaran (contoh: 2023/2024)"
                     value={metadata.tahunPelajaran}
                     onChange={(e) => setMetadata({ ...metadata, tahunPelajaran: e.target.value })}
                     className={`px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${metadataInputClass('tahunPelajaran')}`}
