@@ -11,7 +11,7 @@ import { KisiKisiData, KisiKisiItem } from '@/lib/kisi-parser';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-type ExamType = 'PSAJ' | 'KAK' | 'PAS';
+type ExamType = 'PSAJ' | 'KAK' | 'PAS' | 'PTS';
 
 export default function Home() {
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
@@ -27,7 +27,7 @@ export default function Home() {
     tahunPelajaran: '2025 / 2026'
   });
   const [isExporting, setIsExporting] = useState(false);
-  const examTypeOptions: ExamType[] = ['PSAJ', 'KAK', 'PAS'];
+  const examTypeOptions: ExamType[] = ['PSAJ', 'KAK', 'PAS', 'PTS'];
   const metadataLabels: Record<keyof typeof metadata, string> = {
     namaSekolah: 'Nama Sekolah',
     mataPelajaran: 'Mata Pelajaran',
@@ -184,7 +184,7 @@ export default function Home() {
 
   const handleParsed = (result: ParseResult) => {
     if (!examType) {
-      alert('Pilih jenis ujian (PSAJ, KAK, atau PAS) sebelum upload file RTF.');
+      alert('Pilih jenis ujian (PSAJ, KAK, PAS, atau PTS) sebelum upload file RTF.');
       return;
     }
 
@@ -282,7 +282,7 @@ export default function Home() {
           <div className="space-y-6">
             <div className="bg-white rounded-xl shadow-lg p-6 print:hidden">
               <h2 className="text-xl font-bold mb-4 text-gray-900">Pilih Jenis Generate Kartu Soal</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {examTypeOptions.map((type) => (
                   <button
                     key={type}

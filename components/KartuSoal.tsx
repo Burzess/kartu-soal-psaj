@@ -4,7 +4,7 @@ import React from 'react';
 import { Question, ExtractedImage } from '@/lib/parser';
 import { KisiKisiItem } from '@/lib/kisi-parser';
 
-type ExamType = 'PSAJ' | 'KAK' | 'PAS';
+type ExamType = 'PSAJ' | 'KAK' | 'PAS' | 'PTS';
 
 interface KartuSoalProps {
   question: Question;

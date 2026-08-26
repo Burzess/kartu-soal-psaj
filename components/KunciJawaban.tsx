@@ -3,7 +3,7 @@
 import React from 'react';
 import { Question, ExtractedImage } from '@/lib/parser';
 
-type ExamType = 'PSAJ' | 'KAK' | 'PAS';
+type ExamType = 'PSAJ' | 'KAK' | 'PAS' | 'PTS';
 
 interface KunciJawabanProps {
   questions: Question[];
@@ -66,7 +66,8 @@ export default function KunciJawaban({ questions, examType, metadata, skorPerSoa
   const examHeaderByType: Record<ExamType, string> = {
     PSAJ: 'PENILAIAN SUMATIF AKHIR JENJANG (PSAJ)',
     KAK: 'KOMPETENSI AKHIR KELULUSAN (KAK)',
-    PAS: 'PENILAIAN AKHIR SEMESTER (PAS)'
+    PAS: 'PENILAIAN AKHIR SEMESTER (PAS)',
+    PTS: 'PENILAIAN TENGAH SEMESTER (PTS)'
   };
   
   const hasPG = pgQuestions.length > 0;

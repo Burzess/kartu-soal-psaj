@@ -5,7 +5,7 @@ import { Question, ExtractedImage } from '@/lib/parser';
 import { KisiKisiItem } from '@/lib/kisi-parser';
 import Image from 'next/image';
 
-type ExamType = 'PSAJ' | 'KAK' | 'PAS';
+type ExamType = 'PSAJ' | 'KAK' | 'PAS' | 'PTS';
 
 interface KartuSoalEssayProps {
   question: Question;
