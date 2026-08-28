@@ -20,6 +20,7 @@ interface KartuSoalEssayProps {
   images?: ExtractedImage[];
   kisiKisi?: KisiKisiItem;
   examType: ExamType;
+  totalQuestions?: number;
 }
 
 // Helper to render text with image placeholders and preserve line breaks/lists
@@ -110,7 +111,7 @@ function renderTextWithImages(text: string, images?: ExtractedImage[]): React.Re
   );
 }
 
-export default function KartuSoalEssay({ question, metadata, images, kisiKisi, examType }: KartuSoalEssayProps) {
+export default function KartuSoalEssay({ question, metadata, images, kisiKisi, examType, totalQuestions }: KartuSoalEssayProps) {
   // Labels and their corresponding kisi-kisi values
   const labelData = [
     { label: 'Capaian Pembelajaran', value: kisiKisi?.capaianPembelajaran || '' },
@@ -157,7 +158,7 @@ export default function KartuSoalEssay({ question, metadata, images, kisiKisi, e
           </div>
           <div className="flex">
             <span className="w-34 font-bold">Jumlah Soal</span>
-            <span>: 5</span>
+            <span>: {totalQuestions || 5}</span>
           </div>
           <div className="flex">
             <span className="w-34 font-bold">Tahun Pelajaran</span>

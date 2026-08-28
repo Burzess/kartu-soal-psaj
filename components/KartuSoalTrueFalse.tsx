@@ -6,7 +6,7 @@ import { KisiKisiItem } from '@/lib/kisi-parser';
 
 type ExamType = 'PSAJ' | 'KAK' | 'PAS' | 'PTS';
 
-interface KartuSoalProps {
+interface KartuSoalTrueFalseProps {
   question: Question;
   metadata?: {
     namaSekolah?: string;
@@ -24,18 +24,15 @@ interface KartuSoalProps {
 
 // Helper to render text with image placeholders and preserve line breaks/lists
 function renderTextWithImages(text: string, images?: ExtractedImage[]): React.ReactNode {
-  // First, split by newlines to preserve formatting
   const lines = text.split('\n');
   
   const renderLine = (line: string, lineIndex: number): React.ReactNode => {
-    // Check for [IMG_X] markers (extracted images) and [GAMBAR] (placeholder)
     const imgPattern = /\[(IMG_\d+)\]|\[GAMBAR\]/g;
     
     if (!imgPattern.test(line)) {
       return line;
     }
     
-    // Reset regex
     imgPattern.lastIndex = 0;
     
     const parts: React.ReactNode[] = [];
@@ -43,15 +40,13 @@ function renderTextWithImages(text: string, images?: ExtractedImage[]): React.Re
     let match;
     
     while ((match = imgPattern.exec(line)) !== null) {
-      // Add text before the match
       if (match.index > lastIndex) {
         parts.push(line.substring(lastIndex, match.index));
       }
       
-      const imgId = match[1]; // IMG_1, IMG_2, etc.
+      const imgId = match[1];
       
       if (imgId && images) {
-        // Find the actual image
         const img = images.find(i => i.id === imgId);
         if (img && (img.format === 'png' || img.format === 'jpeg')) {
           parts.push(
@@ -63,7 +58,6 @@ function renderTextWithImages(text: string, images?: ExtractedImage[]): React.Re
             />
           );
         } else {
-          // WMF/EMF or unknown format - show placeholder
           parts.push(
             <span key={`${imgId}-${match.index}-${lineIndex}`} className="inline-block bg-gray-200 border border-dashed border-gray-400 px-2 py-1 mx-1 text-gray-600 text-[10px] rounded">
               📷 Gambar (format tidak didukung)
@@ -71,7 +65,6 @@ function renderTextWithImages(text: string, images?: ExtractedImage[]): React.Re
           );
         }
       } else {
-        // Generic [GAMBAR] placeholder
         parts.push(
           <span key={`gambar-${match.index}-${lineIndex}`} className="inline-block bg-gray-200 border border-dashed border-gray-400 px-2 py-1 mx-1 text-gray-600 text-[10px] rounded">
             📷 Gambar
@@ -82,7 +75,6 @@ function renderTextWithImages(text: string, images?: ExtractedImage[]): React.Re
       lastIndex = match.index + match[0].length;
     }
     
-    // Add remaining text
     if (lastIndex < line.length) {
       parts.push(line.substring(lastIndex));
     }
@@ -90,19 +82,16 @@ function renderTextWithImages(text: string, images?: ExtractedImage[]): React.Re
     return <>{parts}</>;
   };
 
-  // If only one line, render simply
   if (lines.length === 1) {
     return renderLine(lines[0], 0);
   }
 
-  // Render each line, checking for list items
   return (
     <div className="space-y-1">
       {lines.map((line, idx) => {
         const trimmedLine = line.trim();
         if (!trimmedLine) return null;
         
-        // Check if line is a list item (numbered or lettered)
         const isListItem = /^\s*(\d+|[a-zA-Z])[.)]\s+/.test(line);
         
         return (
@@ -115,8 +104,7 @@ function renderTextWithImages(text: string, images?: ExtractedImage[]): React.Re
   );
 }
 
-export default function KartuSoal({ question, metadata, images, kisiKisi, examType, totalQuestions }: KartuSoalProps) {
-  // Labels and their corresponding kisi-kisi values
+export default function KartuSoalTrueFalse({ question, metadata, images, kisiKisi, examType, totalQuestions }: KartuSoalTrueFalseProps) {
   const labelData = [
     { label: 'Capaian Pembelajaran', value: kisiKisi?.capaianPembelajaran || '' },
     { label: 'Tujuan Pembelajaran', value: kisiKisi?.tujuanPembelajaran || '' },
@@ -127,22 +115,16 @@ export default function KartuSoal({ question, metadata, images, kisiKisi, examTy
   ];
 
   const options = [
-    `A. ${question.options?.a || ''}`,
-    `B. ${question.options?.b || ''}`,
-    `C. ${question.options?.c || ''}`,
-    `D. ${question.options?.d || ''}`
+    `A. ${question.options?.a || 'Benar'}`,
+    `B. ${question.options?.b || 'Salah'}`
   ];
-
-  if (question.options?.e) {
-    options.push(`E. ${question.options.e}`);
-  }
 
   const kelasDanUjian = metadata?.kelasUjian ? `${metadata.kelasUjian} / ${examType}` : '-';
 
   return (
     <div className="mt-8 w-full bg-white border-2 border-black print:border-black print:break-after-page text-black text-[12px] leading-normal" style={{ backgroundColor: '#ffffff' }}>
       <div className="bg-[#c8c8c8] border-b border-black text-center font-bold text-[24px] py-2 tracking-tight">
-        KARTU SOAL BENTUK PILIHAN GANDA
+        KARTU SOAL BENTUK BENAR / SALAH
       </div>
 
       <div className="grid grid-cols-2 border-b border-black">
@@ -168,11 +150,11 @@ export default function KartuSoal({ question, metadata, images, kisiKisi, examTy
         <div className="p-4 space-y-2">
           <div className="flex">
             <span className="w-34 font-bold">Bentuk Tes</span>
-            <span>: Pilihan Ganda</span>
+            <span>: Benar / Salah</span>
           </div>
           <div className="flex">
             <span className="w-34 font-bold">Jumlah Soal</span>
-            <span>: {totalQuestions || 40}</span>
+            <span>: {totalQuestions || '-'}</span>
           </div>
           <div className="flex">
             <span className="w-34 font-bold">Tahun Pelajaran</span>
@@ -199,7 +181,7 @@ export default function KartuSoal({ question, metadata, images, kisiKisi, examTy
           <div className="grid grid-cols-[28%_72%] gap-2">
             <div className="border border-black">
               <div className="bg-[#c8c8c8] font-bold border-b border-black h-[28px] flex items-center justify-center">No.Soal</div>
-              <div className="bg-[#8eb7df] text-center py-1">{question.number}</div>
+              <div className="bg-[#8eb7df] text-center py-1 font-bold">{question.number}</div>
             </div>
 
             <div className="border border-black">
@@ -218,7 +200,7 @@ export default function KartuSoal({ question, metadata, images, kisiKisi, examTy
               <div className="bg-[#c8c8c8] font-bold border-b border-black h-[28px] flex items-center justify-center">Pilihan Jawaban</div>
               <div className="bg-[#fff200] p-2 min-h-38.5 space-y-1">
                 {options.map((option) => (
-                  <div key={option} className="whitespace-pre-wrap wrap-break-word">{renderTextWithImages(option, images)}</div>
+                  <div key={option} className="whitespace-pre-wrap wrap-break-word font-semibold">{option}</div>
                 ))}
               </div>
             </div>

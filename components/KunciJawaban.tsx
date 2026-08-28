@@ -62,7 +62,10 @@ function renderTextWithImages(text: string, images?: ExtractedImage[]): React.Re
 
 export default function KunciJawaban({ questions, examType, metadata, skorPerSoal = 1.5, images }: KunciJawabanProps) {
   const pgQuestions = questions.filter(q => q.type === 'PG');
+  const tfQuestions = questions.filter(q => q.type === 'TRUE_FALSE');
+  const matchingQuestions = questions.filter(q => q.type === 'MATCHING');
   const essayQuestions = questions.filter(q => q.type === 'URAIAN');
+
   const examHeaderByType: Record<ExamType, string> = {
     PSAJ: 'PENILAIAN SUMATIF AKHIR JENJANG (PSAJ)',
     KAK: 'KOMPETENSI AKHIR KELULUSAN (KAK)',
@@ -71,16 +74,27 @@ export default function KunciJawaban({ questions, examType, metadata, skorPerSoa
   };
   
   const hasPG = pgQuestions.length > 0;
+  const hasTF = tfQuestions.length > 0;
+  const hasMatching = matchingQuestions.length > 0;
   const hasEssay = essayQuestions.length > 0;
 
-  // LOGIKA DINAMIS: Jika hanya ada PG (tanpa essay), skor otomatis dibagi agar max 100
-  const actualSkorPerSoalPG = (hasPG && !hasEssay) 
-    ? Number((100 / pgQuestions.length).toFixed(2)) 
-    : skorPerSoal;
+  const totalObjectiveCount = pgQuestions.length + tfQuestions.length + matchingQuestions.length;
 
-  const totalSkorPG = Number((pgQuestions.length * actualSkorPerSoalPG).toFixed(2));
-  const totalSkorEssay = essayQuestions.length * 8; // Default skor essay per soal
-  const totalKeseluruhan = Number((totalSkorPG + totalSkorEssay).toFixed(2));
+  // LOGIKA DINAMIS PEMBAGIAN SKOR
+  let actualSkorObj = skorPerSoal;
+  if (!hasEssay && totalObjectiveCount > 0) {
+    actualSkorObj = Number((100 / totalObjectiveCount).toFixed(2));
+  } else if (hasEssay && totalObjectiveCount > 0) {
+    const totalEssayPoints = essayQuestions.length * 8;
+    const remainingObjPoints = Math.max(0, 100 - totalEssayPoints);
+    actualSkorObj = Number((remainingObjPoints / totalObjectiveCount).toFixed(2));
+  }
+
+  const totalSkorPG = Number((pgQuestions.length * actualSkorObj).toFixed(2));
+  const totalSkorTF = Number((tfQuestions.length * actualSkorObj).toFixed(2));
+  const totalSkorMatching = Number((matchingQuestions.length * actualSkorObj).toFixed(2));
+  const totalSkorEssay = essayQuestions.length * 8;
+  const totalKeseluruhan = Number((totalSkorPG + totalSkorTF + totalSkorMatching + totalSkorEssay).toFixed(2));
 
   return (
     <div className="w-full p-8 text-[20px] print:break-after-page" style={{ backgroundColor: '#ffffff', color: '#000000' }}>
@@ -92,7 +106,7 @@ export default function KunciJawaban({ questions, examType, metadata, skorPerSoa
         <h2 className="font-bold text-[26px]">MAPEL {(metadata?.mataPelajaran || '-').toUpperCase()}</h2>
       </div>
 
-      {/* Pedoman Penilaian Pilihan Ganda */}
+      {/* Pedoman & Kunci Jawaban Pilihan Ganda */}
       {hasPG && (
         <>
           <div className="mb-6">
@@ -109,7 +123,7 @@ export default function KunciJawaban({ questions, examType, metadata, skorPerSoa
                 <tr style={{ backgroundColor: '#ffffff' }}>
                   <td className="border border-black p-4">1-{pgQuestions.length}</td>
                   <td className="border border-black p-4 text-left">Benar</td>
-                  <td className="border border-black p-4">{actualSkorPerSoalPG}</td>
+                  <td className="border border-black p-4">{actualSkorObj}</td>
                 </tr>
                 <tr style={{ backgroundColor: '#ffffff' }}>
                   <td className="border border-black p-4"></td>
@@ -118,13 +132,12 @@ export default function KunciJawaban({ questions, examType, metadata, skorPerSoa
                 </tr>
                 <tr className="font-bold" style={{ backgroundColor: '#f0f0f0' }}>
                   <td className="border border-black p-4" colSpan={2}>TOTAL SKOR PILIHAN GANDA</td>
-                  <td className="border border-black p-4">{actualSkorPerSoalPG} x {pgQuestions.length} = {totalSkorPG}</td>
+                  <td className="border border-black p-4">{actualSkorObj} x {pgQuestions.length} = {totalSkorPG}</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
-          {/* Kunci Jawaban Pilihan Ganda */}
           <div className="mb-8">
             <h3 className="font-bold text-[24px] mb-3 p-3" style={{ backgroundColor: '#e5e5e5' }}>Kunci Jawaban Soal Pilihan Ganda</h3>
             <table className="w-full border-collapse border border-black text-[20px]">
@@ -141,14 +154,148 @@ export default function KunciJawaban({ questions, examType, metadata, skorPerSoa
                     <td className="border border-black p-4 text-center">{q.number}</td>
                     <td className="border border-black p-4 text-justify">
                       <span className="font-bold">{q.answer?.toLowerCase()}.</span>{' '}
-                      {renderTextWithImages(q.answer && q.options[q.answer.toLowerCase() as keyof typeof q.options] || '', images)}
+                      {renderTextWithImages((q.answer && q.options?.[q.answer.toLowerCase()]) || '', images)}
                     </td>
-                    <td className="border border-black p-4 text-center">{actualSkorPerSoalPG}</td>
+                    <td className="border border-black p-4 text-center">{actualSkorObj}</td>
                   </tr>
                 ))}
                 <tr className="font-bold" style={{ backgroundColor: '#f0f0f0' }}>
                   <td className="border border-black p-4 text-center" colSpan={2}>Total Skor</td>
                   <td className="border border-black p-4 text-center">{totalSkorPG}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* Pedoman & Kunci Jawaban Benar / Salah */}
+      {hasTF && (
+        <>
+          <div className="mb-6 print:break-before-page">
+            <h3 className="font-bold text-[24px] mb-3 p-3" style={{ backgroundColor: '#e5e5e5' }}>Pedoman Penilaian Soal Benar / Salah</h3>
+            <table className="w-full border-collapse border border-black text-center text-[20px]">
+              <thead>
+                <tr style={{ backgroundColor: '#f0f0f0' }}>
+                  <th className="border border-black p-4 w-24">NO</th>
+                  <th className="border border-black p-4">KRITERIA JAWABAN</th>
+                  <th className="border border-black p-4 w-28">SKOR</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ backgroundColor: '#ffffff' }}>
+                  <td className="border border-black p-4">1-{tfQuestions.length}</td>
+                  <td className="border border-black p-4 text-left">Benar</td>
+                  <td className="border border-black p-4">{actualSkorObj}</td>
+                </tr>
+                <tr style={{ backgroundColor: '#ffffff' }}>
+                  <td className="border border-black p-4"></td>
+                  <td className="border border-black p-4 text-left">Salah</td>
+                  <td className="border border-black p-4">0</td>
+                </tr>
+                <tr className="font-bold" style={{ backgroundColor: '#f0f0f0' }}>
+                  <td className="border border-black p-4" colSpan={2}>TOTAL SKOR BENAR / SALAH</td>
+                  <td className="border border-black p-4">{actualSkorObj} x {tfQuestions.length} = {totalSkorTF}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mb-8">
+            <h3 className="font-bold text-[24px] mb-3 p-3" style={{ backgroundColor: '#e5e5e5' }}>Kunci Jawaban Soal Benar / Salah</h3>
+            <table className="w-full border-collapse border border-black text-[20px]">
+              <thead>
+                <tr className="text-center" style={{ backgroundColor: '#f0f0f0' }}>
+                  <th className="border border-black p-4 w-16">No</th>
+                  <th className="border border-black p-4">Kunci Jawaban</th>
+                  <th className="border border-black p-4 w-24">Skor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tfQuestions.map((q) => {
+                  const isA = q.answer === 'A' || q.answer === 'BENAR' || q.answer === 'TRUE' || q.answer === 'T';
+                  const isB = q.answer === 'B' || q.answer === 'SALAH' || q.answer === 'FALSE' || q.answer === 'S';
+                  const ansLabel = isA ? 'A. Benar' : isB ? 'B. Salah' : q.answer || '-';
+                  return (
+                    <tr key={q.number} style={{ backgroundColor: '#ffffff' }}>
+                      <td className="border border-black p-4 text-center">{q.number}</td>
+                      <td className="border border-black p-4 font-semibold">
+                        {ansLabel}
+                      </td>
+                      <td className="border border-black p-4 text-center">{actualSkorObj}</td>
+                    </tr>
+                  );
+                })}
+                <tr className="font-bold" style={{ backgroundColor: '#f0f0f0' }}>
+                  <td className="border border-black p-4 text-center" colSpan={2}>Total Skor</td>
+                  <td className="border border-black p-4 text-center">{totalSkorTF}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* Pedoman & Kunci Jawaban Mencocokkan */}
+      {hasMatching && (
+        <>
+          <div className="mb-6 print:break-before-page">
+            <h3 className="font-bold text-[24px] mb-3 p-3" style={{ backgroundColor: '#e5e5e5' }}>Pedoman Penilaian Soal Mencocokkan</h3>
+            <table className="w-full border-collapse border border-black text-center text-[20px]">
+              <thead>
+                <tr style={{ backgroundColor: '#f0f0f0' }}>
+                  <th className="border border-black p-4 w-24">NO</th>
+                  <th className="border border-black p-4">KRITERIA JAWABAN</th>
+                  <th className="border border-black p-4 w-28">SKOR</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ backgroundColor: '#ffffff' }}>
+                  <td className="border border-black p-4">1-{matchingQuestions.length}</td>
+                  <td className="border border-black p-4 text-left">Benar</td>
+                  <td className="border border-black p-4">{actualSkorObj}</td>
+                </tr>
+                <tr style={{ backgroundColor: '#ffffff' }}>
+                  <td className="border border-black p-4"></td>
+                  <td className="border border-black p-4 text-left">Salah</td>
+                  <td className="border border-black p-4">0</td>
+                </tr>
+                <tr className="font-bold" style={{ backgroundColor: '#f0f0f0' }}>
+                  <td className="border border-black p-4" colSpan={2}>TOTAL SKOR MENCOCOKKAN</td>
+                  <td className="border border-black p-4">{actualSkorObj} x {matchingQuestions.length} = {totalSkorMatching}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mb-8">
+            <h3 className="font-bold text-[24px] mb-3 p-3" style={{ backgroundColor: '#e5e5e5' }}>Kunci Jawaban Soal Mencocokkan</h3>
+            <table className="w-full border-collapse border border-black text-[20px]">
+              <thead>
+                <tr className="text-center" style={{ backgroundColor: '#f0f0f0' }}>
+                  <th className="border border-black p-4 w-16">No</th>
+                  <th className="border border-black p-4">Kunci Pasangan</th>
+                  <th className="border border-black p-4 w-24">Skor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matchingQuestions.map((q) => {
+                  const keyLetter = (q.answer || '').toLowerCase();
+                  const matchedText = q.options?.[keyLetter] || '';
+                  return (
+                    <tr key={q.number} style={{ backgroundColor: '#ffffff' }}>
+                      <td className="border border-black p-4 text-center">{q.number}</td>
+                      <td className="border border-black p-4 text-justify">
+                        <span className="font-bold">{q.answer?.toUpperCase()}.</span>{' '}
+                        {renderTextWithImages(matchedText || q.answer, images)}
+                      </td>
+                      <td className="border border-black p-4 text-center">{actualSkorObj}</td>
+                    </tr>
+                  );
+                })}
+                <tr className="font-bold" style={{ backgroundColor: '#f0f0f0' }}>
+                  <td className="border border-black p-4 text-center" colSpan={2}>Total Skor</td>
+                  <td className="border border-black p-4 text-center">{totalSkorMatching}</td>
                 </tr>
               </tbody>
             </table>

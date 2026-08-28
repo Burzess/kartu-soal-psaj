@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { parseRTF, parseTextToQuestions, ExtractedImage } from '@/lib/parser';
+import { parseRTF, parseTextToQuestions, ExtractedImage, ParseResult, Question } from '@/lib/parser';
 import { convertWmfEmfToPng, hasWmfEmfImages } from '@/lib/wmf-converter';
 
 export default function DebugRTF() {
   const [plainText, setPlainText] = useState('');
   const [images, setImages] = useState<ExtractedImage[]>([]);
-  const [parseResult, setParseResult] = useState<any>(null);
+  const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [isConverting, setIsConverting] = useState(false);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,7 +94,13 @@ export default function DebugRTF() {
             {parseResult && (
               <div className="bg-white rounded-lg shadow p-6">
                 <div className={`p-4 rounded mb-4 ${parseResult.questions.length > 0 ? 'bg-green-100 border-2 border-green-500' : 'bg-red-100 border-2 border-red-500'}`}>
-                  <p className="font-bold text-lg text-gray-900">Questions: {parseResult.questions.length}</p>
+                  <p className="font-bold text-lg text-gray-900">Total Questions: {parseResult.questions.length}</p>
+                  <p className="text-sm font-semibold text-gray-700">
+                    PG: {parseResult.questions.filter((q: Question) => q.type === 'PG').length} | 
+                    True/False: {parseResult.questions.filter((q: Question) => q.type === 'TRUE_FALSE').length} | 
+                    Matching: {parseResult.questions.filter((q: Question) => q.type === 'MATCHING').length} | 
+                    Uraian: {parseResult.questions.filter((q: Question) => q.type === 'URAIAN').length}
+                  </p>
                   <p className="font-bold text-lg text-red-700">Errors: {parseResult.errors.length}</p>
                   <p className="font-bold text-lg text-blue-700">Images: {images.length}</p>
                 </div>

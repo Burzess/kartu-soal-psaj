@@ -5,8 +5,10 @@ import FileUpload from '@/components/FileUpload';
 import KisiKisiUpload from '@/components/KisiKisiUpload';
 import KartuSoal from '@/components/KartuSoal';
 import KartuSoalEssay from '@/components/KartuSoalEssay';
+import KartuSoalTrueFalse from '@/components/KartuSoalTrueFalse';
+import KartuSoalMatching from '@/components/KartuSoalMatching';
 import KunciJawaban from '@/components/KunciJawaban';
-import { ParseResult } from '@/lib/parser';
+import { ParseResult, Question } from '@/lib/parser';
 import { KisiKisiData, KisiKisiItem } from '@/lib/kisi-parser';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -62,9 +64,21 @@ export default function Home() {
       : 'border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
     }`;
 
-  // Helper to get kisi-kisi for a specific question number
-  const getKisiKisi = (questionNumber: number): KisiKisiItem | undefined => {
+  // Helper to get kisi-kisi for a specific question number and optional type
+  const getKisiKisi = (questionNumber: number, questionType?: Question['type']): KisiKisiItem | undefined => {
     if (!kisiKisiData) return undefined;
+    if (questionType) {
+      const matched = kisiKisiData.items.find(item => {
+        if (item.nomorSoal !== questionNumber) return false;
+        const b = (item.bentukSoal || '').toLowerCase();
+        if (questionType === 'PG' && (b.includes('ganda') || b.includes('pg'))) return true;
+        if (questionType === 'TRUE_FALSE' && (b.includes('benar') || b.includes('salah') || b.includes('true') || b.includes('false') || b.includes('bs'))) return true;
+        if (questionType === 'MATCHING' && (b.includes('jodoh') || b.includes('match') || b.includes('cocok'))) return true;
+        if (questionType === 'URAIAN' && (b.includes('uraian') || b.includes('essay'))) return true;
+        return false;
+      });
+      if (matched) return matched;
+    }
     return kisiKisiData.items.find(item => item.nomorSoal === questionNumber);
   };
 
@@ -512,27 +526,55 @@ export default function Home() {
               </div>
             ) : (
               <div className="space-y-6">
-                {parseResult.questions.map((question, index) => (
-                  <div key={index} className="kartu-soal-card">
-                    {question.type === 'URAIAN' ? (
-                      <KartuSoalEssay
-                        question={question}
-                        metadata={metadata}
-                        examType={examType || 'PSAJ'}
-                        images={parseResult.images}
-                        kisiKisi={getKisiKisi(question.number)}
-                      />
-                    ) : (
-                      <KartuSoal
-                        question={question}
-                        metadata={metadata}
-                        examType={examType || 'PSAJ'}
-                        images={parseResult.images}
-                        kisiKisi={getKisiKisi(question.number)}
-                      />
-                    )}
-                  </div>
-                ))}
+                {(() => {
+                  const countByType = {
+                    PG: parseResult.questions.filter(q => q.type === 'PG').length,
+                    TRUE_FALSE: parseResult.questions.filter(q => q.type === 'TRUE_FALSE').length,
+                    MATCHING: parseResult.questions.filter(q => q.type === 'MATCHING').length,
+                    URAIAN: parseResult.questions.filter(q => q.type === 'URAIAN').length,
+                  };
+                  return parseResult.questions.map((question, index) => (
+                    <div key={index} className="kartu-soal-card">
+                      {question.type === 'URAIAN' ? (
+                        <KartuSoalEssay
+                          question={question}
+                          metadata={metadata}
+                          examType={examType || 'PSAJ'}
+                          images={parseResult.images}
+                          kisiKisi={getKisiKisi(question.number, question.type)}
+                          totalQuestions={countByType.URAIAN}
+                        />
+                      ) : question.type === 'TRUE_FALSE' ? (
+                        <KartuSoalTrueFalse
+                          question={question}
+                          metadata={metadata}
+                          examType={examType || 'PSAJ'}
+                          images={parseResult.images}
+                          kisiKisi={getKisiKisi(question.number, question.type)}
+                          totalQuestions={countByType.TRUE_FALSE}
+                        />
+                      ) : question.type === 'MATCHING' ? (
+                        <KartuSoalMatching
+                          question={question}
+                          metadata={metadata}
+                          examType={examType || 'PSAJ'}
+                          images={parseResult.images}
+                          kisiKisi={getKisiKisi(question.number, question.type)}
+                          totalQuestions={countByType.MATCHING}
+                        />
+                      ) : (
+                        <KartuSoal
+                          question={question}
+                          metadata={metadata}
+                          examType={examType || 'PSAJ'}
+                          images={parseResult.images}
+                          kisiKisi={getKisiKisi(question.number, question.type)}
+                          totalQuestions={countByType.PG}
+                        />
+                      )}
+                    </div>
+                  ));
+                })()}
               </div>
             )}
           </div>

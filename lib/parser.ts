@@ -11,14 +11,15 @@ export interface Question {
   number: number;
   text: string;
   options: {
-    a: string;
-    b: string;
-    c: string;
-    d: string;
+    a?: string;
+    b?: string;
+    c?: string;
+    d?: string;
     e?: string;
+    [key: string]: string | undefined;
   };
   answer: string;
-  type: 'PG' | 'URAIAN';
+  type: 'PG' | 'URAIAN' | 'TRUE_FALSE' | 'MATCHING';
   images?: ExtractedImage[]; // Images associated with this question
 }
 
@@ -35,8 +36,8 @@ export function parseTextToQuestions(text: string): ParseResult {
   
   let currentQuestion: Partial<Question> | null = null;
   let currentState: 'question' | 'options' | 'answer' = 'question';
-  let isUraianMode = false;
-  let allowNumberReset = true;
+  let currentType: 'PG' | 'URAIAN' | 'TRUE_FALSE' | 'MATCHING' = 'PG';
+  let activeMatchingChoices: Record<string, string> = {};
   let answerKeyStartIndex = -1;
 
   // Pre-scan: find Answer Key / Answer Section
@@ -49,6 +50,23 @@ export function parseTextToQuestions(text: string): ParseResult {
   }
 
   const parseEndIndex = answerKeyStartIndex >= 0 ? answerKeyStartIndex : lines.length;
+
+  const saveCurrentQuestion = () => {
+    if (currentQuestion && currentQuestion.number) {
+      if (currentQuestion.type === 'MATCHING' && Object.keys(activeMatchingChoices).length > 0) {
+        currentQuestion.options = {
+          ...activeMatchingChoices,
+          ...(currentQuestion.options || {})
+        } as Question['options'];
+      }
+      if (isValidQuestionCandidate(currentQuestion)) {
+        questions.push(finalizeQuestion(currentQuestion));
+      } else {
+        errors.push(`Soal ${currentQuestion.number} tidak lengkap`);
+      }
+    }
+    currentQuestion = null;
+  };
   
   for (let i = 0; i < parseEndIndex; i++) {
     const line = lines[i];
@@ -58,34 +76,59 @@ export function parseTextToQuestions(text: string): ParseResult {
     
     // Detect section markers - must be standalone lines (not part of question/option text)
     if (/^(ESSAY|URAIAN|SHORT\s*ANSWER)\s*$/i.test(line)) {
-      if (currentQuestion && currentQuestion.number) {
-        if (isUraianMode || validateQuestion(currentQuestion) || validateQuestionPartial(currentQuestion)) {
-          questions.push(finalizeQuestion(currentQuestion));
-        } else {
-          errors.push(`Soal ${currentQuestion.number} tidak lengkap`);
-        }
-      }
-
-      currentQuestion = null;
+      saveCurrentQuestion();
+      currentType = 'URAIAN';
       currentState = 'question';
-      isUraianMode = true;
-      allowNumberReset = true;
       continue;
     }
-    if (/^Multiple\s*Choice$|^PILIHAN\s*GANDA$/i.test(line)) {
-      if (currentQuestion && currentQuestion.number) {
-        if (isUraianMode || validateQuestion(currentQuestion) || validateQuestionPartial(currentQuestion)) {
-          questions.push(finalizeQuestion(currentQuestion));
-        } else {
-          errors.push(`Soal ${currentQuestion.number} tidak lengkap`);
-        }
-      }
-
-      currentQuestion = null;
+    if (/^(Multiple\s*Choice|PILIHAN\s*GANDA)\s*$/i.test(line)) {
+      saveCurrentQuestion();
+      currentType = 'PG';
       currentState = 'question';
-      isUraianMode = false;
-      allowNumberReset = true;
       continue;
+    }
+    if (/^(TRUE[\s/-]*FALSE|BENAR[\s/-]*SALAH|B[\s/-]*S)\s*$/i.test(line)) {
+      saveCurrentQuestion();
+      currentType = 'TRUE_FALSE';
+      currentState = 'question';
+      continue;
+    }
+    if (/^(MATCHING|MENJODOHKAN|MENCOCOKKAN|MENCOCOKAN)\s*$/i.test(line)) {
+      saveCurrentQuestion();
+      currentType = 'MATCHING';
+      currentState = 'question';
+      activeMatchingChoices = {};
+      continue;
+    }
+
+    // Check for inline answer keys like "1. ANS: D PTS: 1" or "6. ANS: E PTS: 1"
+    const numberAnswerMatch = line.match(/^(\d+)[.)]\s*ANS\s*[:.-]?\s*([A-Za-z0-9]+)/i);
+    if (numberAnswerMatch) {
+      const qNum = parseInt(numberAnswerMatch[1]);
+      let ansVal = numberAnswerMatch[2].toUpperCase();
+      if (currentType === 'TRUE_FALSE') {
+        if (ansVal === 'T' || ansVal === 'TRUE' || ansVal === 'BENAR' || ansVal === 'A') ansVal = 'A';
+        else if (ansVal === 'F' || ansVal === 'FALSE' || ansVal === 'SALAH' || ansVal === 'S' || ansVal === 'B') ansVal = 'B';
+      }
+      const targetQ = questions.slice().reverse().find(q => q.number === qNum && q.type === currentType) ||
+                      (currentQuestion && currentQuestion.number === qNum ? currentQuestion : null);
+      if (targetQ) {
+        targetQ.answer = ansVal;
+      }
+      continue;
+    }
+
+    // In matching mode, if we see new choices or context pool before questions
+    if (currentType === 'MATCHING') {
+      const choiceMatch = line.match(/^([a-z])[.)]\s+(.+)$/i);
+      if (choiceMatch && (!currentQuestion || currentState !== 'question')) {
+        const letter = choiceMatch[1].toLowerCase();
+        if (letter === 'a') {
+          activeMatchingChoices = {};
+        }
+        activeMatchingChoices[letter] = choiceMatch[2];
+        continue;
+      }
     }
     
     // Detect question number — also handles ExamView Test format "____ 1. text"
@@ -102,46 +145,32 @@ export function parseTextToQuestions(text: string): ParseResult {
         currentState === 'question' &&
         currentQuestion.text &&
         usesParenSeparator &&
-        !isUraianMode &&
-        // Only treat as sub-item if current question has no options filled yet
+        currentType === 'PG' &&
         currentQuestion.options &&
         !currentQuestion.options.a &&
         !currentQuestion.options.b;
 
-      const canStartNewQuestion =
-        !isLikelySubItem && (
-          !currentQuestion ||
-          detectedNumber > (currentQuestion.number || 0) ||
-          (allowNumberReset && detectedNumber === 1)
-        );
-
-      if (canStartNewQuestion) {
-        // Save previous question if exists
-        if (currentQuestion && currentQuestion.number) {
-          if (isUraianMode || validateQuestion(currentQuestion) || validateQuestionPartial(currentQuestion)) {
-            questions.push(finalizeQuestion(currentQuestion));
-          } else {
-            errors.push(`Soal ${currentQuestion.number} tidak lengkap`);
-          }
-        }
+      if (!isLikelySubItem) {
+        saveCurrentQuestion();
 
         // Start new question
         currentQuestion = {
           number: detectedNumber,
           text: questionMatch[2],
-          options: { a: '', b: '', c: '', d: '' },
+          options: currentType === 'MATCHING' ? { ...activeMatchingChoices } :
+                   currentType === 'TRUE_FALSE' ? { a: 'Benar', b: 'Salah' } :
+                   { a: '', b: '', c: '', d: '' },
           answer: '',
-          type: isUraianMode ? 'URAIAN' : 'PG'
+          type: currentType
         };
         currentState = 'question';
-        allowNumberReset = false;
         continue;
       }
 
       // Numbered lines inside question body (sub-items or continuation)
       if (currentQuestion && currentState === 'question') {
         currentQuestion.text = `${currentQuestion.text || ''}\n${line}`.trim();
-      } else if (currentQuestion && currentQuestion.options && currentState === 'options' && !isUraianMode) {
+      } else if (currentQuestion && currentQuestion.options && currentState === 'options' && currentType === 'PG') {
         const lastOption = findLastOption(currentQuestion.options);
         if (lastOption) {
           currentQuestion.options[lastOption] += '\n' + line;
@@ -151,7 +180,7 @@ export function parseTextToQuestions(text: string): ParseResult {
     }
     
     // For URAIAN, only collect text and answer
-    if (isUraianMode && currentQuestion) {
+    if (currentType === 'URAIAN' && currentQuestion) {
       const answerMatch = line.match(/^(ANS|ANSWER|JAWABAN|KUNCI|PEMBAHASAN)\s*[:.-]?\s*(.*)$/i);
       if (answerMatch) {
         const firstAnswerLine = answerMatch[2].trim();
@@ -191,10 +220,23 @@ export function parseTextToQuestions(text: string): ParseResult {
       }
       continue;
     }
+
+    // In matching mode, if new choices appear between groups
+    if (currentType === 'MATCHING') {
+      const choiceMatch = line.match(/^([a-z])[.)]\s+(.+)$/i);
+      if (choiceMatch) {
+        const letter = choiceMatch[1].toLowerCase();
+        if (letter === 'a') {
+          activeMatchingChoices = {};
+        }
+        activeMatchingChoices[letter] = choiceMatch[2];
+        continue;
+      }
+    }
     
     // For PG, detect options
     const optionMatch = line.match(/^([a-eA-E])[.)]\s+(.+)$/);
-    if (optionMatch && currentQuestion && !isUraianMode) {
+    if (optionMatch && currentQuestion && currentType === 'PG') {
       const optLetter = optionMatch[1].toLowerCase();
       currentQuestion.options = currentQuestion.options || { a: '', b: '', c: '', d: '' };
       currentQuestion.options[optLetter as 'a' | 'b' | 'c' | 'd' | 'e'] = optionMatch[2];
@@ -203,23 +245,28 @@ export function parseTextToQuestions(text: string): ParseResult {
     }
     
     // Detect answer key - flexible format
-    const answerMatch = line.match(/^(ANS|ANSWER|JAWABAN|KUNCI)\s*:?\s*([a-eA-E])(\s|$)/i);
+    const answerMatch = line.match(/^(ANS|ANSWER|JAWABAN|KUNCI)\s*[:.-]?\s*([A-Za-z0-9]+)(\s|$)/i);
     if (answerMatch && currentQuestion) {
-      currentQuestion.answer = answerMatch[2].toUpperCase();
+      let rawAns = answerMatch[2].toUpperCase();
+      if (currentType === 'TRUE_FALSE') {
+        if (rawAns === 'T' || rawAns === 'TRUE' || rawAns === 'BENAR' || rawAns === 'A') rawAns = 'A';
+        else if (rawAns === 'F' || rawAns === 'FALSE' || rawAns === 'SALAH' || rawAns === 'S' || rawAns === 'B') rawAns = 'B';
+      }
+      currentQuestion.answer = rawAns;
       currentState = 'answer';
       continue;
     }
     
     // Continue question text (multiline)
     if (currentState === 'question' && currentQuestion && currentQuestion.text) {
-      if (!line.match(/^[a-eA-E][.)]/) && !line.match(/^(ANS|ANSWER|JAWABAN|KUNCI)/i)) {
-        currentQuestion.text += ' ' + line;
+      if (!line.match(/^[a-eA-E][.)]/) && !line.match(/^(ANS|ANSWER|JAWABAN|KUNCI|PTS)/i)) {
+        currentQuestion.text += '\n' + line;
       }
     }
     
     // Continue option text (multiline)
-    if (currentState === 'options' && currentQuestion && currentQuestion.options && !isUraianMode) {
-      if (!line.match(/^[a-eA-E][.)]/) && !line.match(/^(ANS|ANSWER|JAWABAN|KUNCI)/i)) {
+    if (currentState === 'options' && currentQuestion && currentQuestion.options && currentType === 'PG') {
+      if (!line.match(/^[a-eA-E][.)]/) && !line.match(/^(ANS|ANSWER|JAWABAN|KUNCI|PTS)/i)) {
         const lastOption = findLastOption(currentQuestion.options);
         if (lastOption) {
           currentQuestion.options[lastOption] += ' ' + line;
@@ -229,13 +276,7 @@ export function parseTextToQuestions(text: string): ParseResult {
   }
   
   // Save last question
-  if (currentQuestion && currentQuestion.number) {
-    if (isUraianMode || validateQuestion(currentQuestion) || validateQuestionPartial(currentQuestion)) {
-      questions.push(finalizeQuestion(currentQuestion));
-    } else {
-      errors.push(`Soal ${currentQuestion.number} tidak lengkap`);
-    }
-  }
+  saveCurrentQuestion();
 
   // Phase 2: Parse Answer Key section and merge answers
   // Debug: show lines that might contain answer section
@@ -260,49 +301,47 @@ export function parseTextToQuestions(text: string): ParseResult {
   return { questions, errors, images: [] };
 }
 
-function validateQuestion(q: Partial<Question>): q is Question {
-  return !!(
-    q.number &&
-    q.text &&
-    q.options &&
-    q.options.a &&
-    q.options.b &&
-    q.options.c &&
-    q.options.d &&
-    q.answer
-  );
-}
-
-// Partial validation: has text and at least some options (answer may come from Answer Key later)
-function validateQuestionPartial(q: Partial<Question>): boolean {
-  return !!(
-    q.number &&
-    q.text &&
-    q.options &&
-    (q.options.a || q.options.b || q.options.c || q.options.d)
-  );
+function isValidQuestionCandidate(q: Partial<Question>): boolean {
+  if (!q.number || !q.text) return false;
+  if (q.type === 'URAIAN' || q.type === 'TRUE_FALSE' || q.type === 'MATCHING') return true;
+  if (q.type === 'PG') {
+    return !!(q.options && (q.options.a || q.options.b || q.options.c || q.options.d));
+  }
+  return true;
 }
 
 // Safely cast partial question to full Question with defaults
 function finalizeQuestion(q: Partial<Question>): Question {
+  const type = q.type || 'PG';
+  let defaultOptions: Question['options'] = {
+    a: q.options?.a || '',
+    b: q.options?.b || '',
+    c: q.options?.c || '',
+    d: q.options?.d || '',
+    ...(q.options?.e ? { e: q.options.e } : {})
+  };
+
+  if (type === 'TRUE_FALSE') {
+    defaultOptions = {
+      a: q.options?.a || 'Benar',
+      b: q.options?.b || 'Salah'
+    };
+  } else if (type === 'MATCHING' && q.options) {
+    defaultOptions = { ...q.options } as Question['options'];
+  }
+
   return {
     number: q.number || 0,
     text: q.text || '',
-    options: {
-      a: q.options?.a || '',
-      b: q.options?.b || '',
-      c: q.options?.c || '',
-      d: q.options?.d || '',
-      ...(q.options?.e ? { e: q.options.e } : {})
-    },
+    options: defaultOptions,
     answer: q.answer || '',
-    type: q.type || 'PG',
+    type,
     ...(q.images ? { images: q.images } : {})
   };
 }
 
 // Parse Answer Key section from ExamView Test export
-// Supports formats: "1. B", "1. ANS: B", "1) B", multi-column tables
+// Supports formats: "1. B", "1. ANS: B", "1) B", "1. ANS: T", "1. ANS: Benar", multi-column tables
 function parseAnswerKeySection(lines: string[], startIndex: number): Map<number, string> {
   const answerMap = new Map<number, string>();
 
@@ -310,15 +349,17 @@ function parseAnswerKeySection(lines: string[], startIndex: number): Map<number,
     const line = lines[i].trim();
     if (!line) continue;
 
-    // Skip section type headers within the answer section (e.g. "MULTIPLE CHOICE", "ESSAY")
-    if (/^(MULTIPLE\s*CHOICE|ESSAY|URAIAN|SHORT\s*ANSWER|PILIHAN\s*GANDA)/i.test(line)) continue;
+    // Skip section type headers within the answer section
+    if (/^(MULTIPLE\s*CHOICE|ESSAY|URAIAN|SHORT\s*ANSWER|PILIHAN\s*GANDA|TRUE[\s/-]*FALSE|MATCHING|MENJODOHKAN|MENCOCOKKAN|MENCOCOKAN)/i.test(line)) continue;
 
-    // Match: number + separator + optional "ANS:" + letter (A-E)
-    const pattern = /(\d+)[.)]\s*(?:ANS\s*[:.-]?\s*)?([A-Ea-e])(?:\s|$)/g;
+    // Match: number + separator + optional "ANS:" + letter (A-Z) or True/False/Benar/Salah
+    const pattern = /(\d+)[.)]\s*(?:ANS\s*[:.-]?\s*)?([A-Za-z]+)(?:\s|$)/g;
     let match;
     while ((match = pattern.exec(line)) !== null) {
       const num = parseInt(match[1]);
-      const letter = match[2].toUpperCase();
+      let letter = match[2].toUpperCase();
+      if (letter === 'T' || letter === 'TRUE' || letter === 'BENAR') letter = 'A';
+      else if (letter === 'F' || letter === 'FALSE' || letter === 'SALAH' || letter === 'S') letter = 'B';
       answerMap.set(num, letter);
     }
   }
@@ -326,7 +367,7 @@ function parseAnswerKeySection(lines: string[], startIndex: number): Map<number,
   return answerMap;
 }
 
-function findLastOption(options: any): 'a' | 'b' | 'c' | 'd' | 'e' | null {
+function findLastOption(options: Question['options']): 'a' | 'b' | 'c' | 'd' | 'e' | null {
   if (options.e) return 'e';
   if (options.d) return 'd';
   if (options.c) return 'c';
@@ -443,7 +484,7 @@ export function extractImagesFromRTF(rtfText: string): { text: string; images: E
     // Extract hex data (the actual image bytes)
     // The hex data comes after all control words
     // Find where control words end and hex data begins
-    let hexData = pictContent
+    const hexData = pictContent
       .replace(/\\[a-z]+(-?\d+)?/gi, '') // Remove control words
       .replace(/\s+/g, '') // Remove whitespace
       .replace(/[^0-9a-fA-F]/g, ''); // Keep only hex chars
@@ -708,6 +749,9 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
     if (/^(Name|Class|Date|ID)\s*[:_]?\s*$/i.test(line)) continue;
     if (/^Page\s+\d+/i.test(line)) continue;
     if (/^Identify the choice/i.test(line)) continue;
+    if (/^Indicate whether the statement/i.test(line)) continue;
+    if (/^Match each item/i.test(line)) continue;
+    if (/^Complete each statement/i.test(line)) continue;
     if (/^_{3,}$/.test(line)) continue;
     
     // Strip leading underscores (ExamView Test blank answer lines: "____ 1.")
@@ -730,6 +774,8 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
     // Clean multiple [GAMBAR] markers into one
     line = line.replace(/(\[GAMBAR\]\s*)+/g, '[GAMBAR] ');
     
+    const markerRegex = /^(ANS|ANSWER|JAWABAN|KUNCI|MULTIPLE|PILIHAN|ESSAY|URAIAN|SHORT|TRUE|BENAR|MATCHING|MENJODOHKAN|MENCOCOKKAN|MENCOCOKAN|B[\s/-]*S|PTS|\[IMG_|\[GAMBAR)/i;
+
     // If line is just "a." through "e." (or "a)" etc), merge with ALL following
     // continuation lines until we hit another pattern (option, question, marker)
     if (/^[a-eA-E][.)]$/.test(line)) {
@@ -740,7 +786,7 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
         if (/^[a-eA-E][.)]/.test(nextLine)) break;
         if (/^_*\s*\d+[.)]\s/.test(nextLine)) break;
         if (/^_*\s*\d+[.)]$/.test(nextLine)) break;
-        if (/^(ANS|ANSWER|JAWABAN|KUNCI|MULTIPLE|ESSAY|URAIAN|SHORT)/i.test(nextLine)) break;
+        if (markerRegex.test(nextLine)) break;
         merged = merged + ' ' + nextLine;
         i++;
       }
@@ -759,7 +805,7 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
         if (/^[a-eA-E][.)]/.test(nextLine)) break;
         if (/^_*\s*\d+[.)]\s/.test(nextLine)) break;
         if (/^_*\s*\d+[.)]$/.test(nextLine)) break;
-        if (/^(ANS|ANSWER|JAWABAN|KUNCI|MULTIPLE|ESSAY|URAIAN|SHORT)/i.test(nextLine)) break;
+        if (markerRegex.test(nextLine)) break;
         merged = merged + ' ' + nextLine;
         i++;
       }
@@ -772,7 +818,7 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
       const prevLine = cleanLines[cleanLines.length - 1];
       const isOptionStart = /^[a-eA-E][.)]\s/.test(line);
       const isQuestionStart = /^_*\s*\d+[.)]\s/.test(line);
-      const isMarker = /^(ANS|ANSWER|JAWABAN|KUNCI|MULTIPLE|ESSAY|URAIAN|SHORT|PTS|\[IMG_|\[GAMBAR)/i.test(line);
+      const isMarker = markerRegex.test(line);
       const prevIsOrphanOption = /^[a-eA-E][.)]$/.test(prevLine);
       const prevIsOrphanQuestion = /^\d+[.)]$/.test(prevLine);
       
@@ -786,8 +832,8 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
       if (!isOptionStart && !isQuestionStart && !isMarker && !prevIsOrphanOption) {
         // Check if previous line looks like it was cut mid-sentence
         const prevEndsClean = /[.?!:;,\)]$/.test(prevLine);
-        if (!prevEndsClean && prevLine.length > 0) {
-          cleanLines[cleanLines.length - 1] = prevLine + line;
+        if (!prevEndsClean && prevLine.length > 0 && !markerRegex.test(prevLine)) {
+          cleanLines[cleanLines.length - 1] = prevLine + ' ' + line;
           continue;
         }
       }

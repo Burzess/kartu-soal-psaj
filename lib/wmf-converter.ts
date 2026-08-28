@@ -13,8 +13,8 @@ async function getWMF() {
   if (WMF) return WMF;
   
   try {
-    const module = await import('wmf');
-    WMF = module.default || module;
+    const wmfModule = await import('wmf');
+    WMF = wmfModule.default || wmfModule;
     return WMF;
   } catch (e) {
     console.warn('Failed to load wmf:', e);
