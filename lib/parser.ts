@@ -7,9 +7,16 @@ export interface ExtractedImage {
   format: 'png' | 'jpeg' | 'wmf' | 'emf' | 'unknown';
 }
 
+export interface MatchingPair {
+  subNumber: number;
+  premise: string;
+  answer: string;
+}
+
 export interface Question {
   number: number;
   text: string;
+  stimulus?: string; // Introductory / stimulus text for matching groups or passage-based questions
   options: {
     a?: string;
     b?: string;
@@ -18,6 +25,7 @@ export interface Question {
     e?: string;
     [key: string]: string | undefined;
   };
+  matchingPairs?: MatchingPair[]; // Sub-items for matching questions
   answer: string;
   type: 'PG' | 'URAIAN' | 'TRUE_FALSE' | 'MATCHING';
   images?: ExtractedImage[]; // Images associated with this question
@@ -30,35 +38,31 @@ export interface ParseResult {
 }
 
 export function parseTextToQuestions(text: string): ParseResult {
-  const lines = text.split('\n').map(line => line.trim());
+  const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
   const questions: Question[] = [];
   const errors: string[] = [];
   
   let currentQuestion: Partial<Question> | null = null;
   let currentState: 'question' | 'options' | 'answer' = 'question';
-  let currentType: 'PG' | 'URAIAN' | 'TRUE_FALSE' | 'MATCHING' = 'PG';
-  let activeMatchingChoices: Record<string, string> = {};
-  let answerKeyStartIndex = -1;
+  let currentType: Question['type'] = 'PG';
 
-  // Pre-scan: find Answer Key / Answer Section
-  for (let i = 0; i < lines.length; i++) {
-    if (/^(ANSWER\s*KEY|ANSWER\s*SECTION|KUNCI\s*JAWABAN)/i.test(lines[i]) ||
-        /Answer\s*Section/i.test(lines[i])) {
-      answerKeyStartIndex = i;
-      break;
-    }
-  }
+  let matchingGroupCount = 0;
+  let currentMatchingGroup: {
+    number: number;
+    stimulus: string;
+    options: Record<string, string>;
+    pairs: MatchingPair[];
+  } | null = null;
+
+  const answerKeyStartIndex = lines.findIndex(l => 
+    /^(ANSWER\s*KEY|ANSWER\s*SECTION|KUNCI\s*JAWABAN)/i.test(l) ||
+    /Answer\s*Section/i.test(l)
+  );
 
   const parseEndIndex = answerKeyStartIndex >= 0 ? answerKeyStartIndex : lines.length;
 
   const saveCurrentQuestion = () => {
     if (currentQuestion && currentQuestion.number) {
-      if (currentQuestion.type === 'MATCHING' && Object.keys(activeMatchingChoices).length > 0) {
-        currentQuestion.options = {
-          ...activeMatchingChoices,
-          ...(currentQuestion.options || {})
-        } as Question['options'];
-      }
       if (isValidQuestionCandidate(currentQuestion)) {
         questions.push(finalizeQuestion(currentQuestion));
       } else {
@@ -66,6 +70,30 @@ export function parseTextToQuestions(text: string): ParseResult {
       }
     }
     currentQuestion = null;
+  };
+
+  const saveCurrentMatchingGroup = () => {
+    if (currentMatchingGroup && currentMatchingGroup.pairs.length > 0) {
+      const pairSummary = currentMatchingGroup.pairs
+        .map(p => `${p.subNumber}-${p.answer || '?'}`)
+        .join(', ');
+
+      const premiseListText = currentMatchingGroup.pairs
+        .map(p => `${p.subNumber}. ${p.premise}`)
+        .join('\n');
+
+      const q: Question = {
+        number: currentMatchingGroup.number,
+        text: premiseListText,
+        stimulus: currentMatchingGroup.stimulus.trim(),
+        options: { ...currentMatchingGroup.options } as Question['options'],
+        matchingPairs: [...currentMatchingGroup.pairs],
+        answer: pairSummary,
+        type: 'MATCHING'
+      };
+      questions.push(q);
+    }
+    currentMatchingGroup = null;
   };
   
   for (let i = 0; i < parseEndIndex; i++) {
@@ -77,58 +105,126 @@ export function parseTextToQuestions(text: string): ParseResult {
     // Detect section markers - must be standalone lines (not part of question/option text)
     if (/^(ESSAY|URAIAN|SHORT\s*ANSWER)\s*$/i.test(line)) {
       saveCurrentQuestion();
+      saveCurrentMatchingGroup();
       currentType = 'URAIAN';
       currentState = 'question';
       continue;
     }
     if (/^(Multiple\s*Choice|PILIHAN\s*GANDA)\s*$/i.test(line)) {
       saveCurrentQuestion();
+      saveCurrentMatchingGroup();
       currentType = 'PG';
       currentState = 'question';
       continue;
     }
     if (/^(TRUE[\s/-]*FALSE|BENAR[\s/-]*SALAH|B[\s/-]*S)\s*$/i.test(line)) {
       saveCurrentQuestion();
+      saveCurrentMatchingGroup();
       currentType = 'TRUE_FALSE';
       currentState = 'question';
       continue;
     }
     if (/^(MATCHING|MENJODOHKAN|MENCOCOKKAN|MENCOCOKAN)\s*$/i.test(line)) {
       saveCurrentQuestion();
+      saveCurrentMatchingGroup();
       currentType = 'MATCHING';
       currentState = 'question';
-      activeMatchingChoices = {};
+      matchingGroupCount = 0;
       continue;
     }
 
-    // Check for inline answer keys like "1. ANS: D PTS: 1" or "6. ANS: E PTS: 1"
+    // MATCHING parsing mode (Unified per stimulus group)
+    if (currentType === 'MATCHING') {
+      const numberAnswerMatch = line.match(/^(\d+)[.)]\s*ANS\s*[:.-]?\s*([A-Za-z0-9]+)/i);
+      if (numberAnswerMatch) {
+        const subNum = parseInt(numberAnswerMatch[1]);
+        const ansVal = numberAnswerMatch[2].toUpperCase();
+        if (currentMatchingGroup) {
+          const targetPair = currentMatchingGroup.pairs.find(p => p.subNumber === subNum);
+          if (targetPair) {
+            targetPair.answer = ansVal;
+          }
+        }
+        continue;
+      }
+
+      const choiceMatch = line.match(/^([a-z])[.)]\s+(.+)$/i);
+      if (choiceMatch) {
+        const letter = choiceMatch[1].toLowerCase();
+        if (letter === 'a') {
+          if (currentMatchingGroup && currentMatchingGroup.pairs.length > 0) {
+            saveCurrentMatchingGroup();
+          }
+          if (!currentMatchingGroup) {
+            matchingGroupCount++;
+            currentMatchingGroup = {
+              number: matchingGroupCount,
+              stimulus: '',
+              options: {},
+              pairs: []
+            };
+          }
+        }
+        if (currentMatchingGroup) {
+          currentMatchingGroup.options[letter] = choiceMatch[2];
+        }
+        continue;
+      }
+
+      const cleanedLine = line.replace(/^_+\s*/, '');
+      const itemMatch = cleanedLine.match(/^(\d+)[.)]\s+(.+)$/);
+      if (itemMatch) {
+        const subNumber = parseInt(itemMatch[1]);
+        const premiseText = itemMatch[2];
+        if (!currentMatchingGroup) {
+          matchingGroupCount++;
+          currentMatchingGroup = {
+            number: matchingGroupCount,
+            stimulus: '',
+            options: {},
+            pairs: []
+          };
+        }
+        currentMatchingGroup.pairs.push({
+          subNumber,
+          premise: premiseText,
+          answer: ''
+        });
+        continue;
+      }
+
+      // Stimulus / context line for matching group
+      if (currentMatchingGroup && currentMatchingGroup.pairs.length > 0) {
+        saveCurrentMatchingGroup();
+      }
+      if (!currentMatchingGroup) {
+        matchingGroupCount++;
+        currentMatchingGroup = {
+          number: matchingGroupCount,
+          stimulus: '',
+          options: {},
+          pairs: []
+        };
+      }
+      currentMatchingGroup.stimulus = (currentMatchingGroup.stimulus ? currentMatchingGroup.stimulus + '\n' : '') + line;
+      continue;
+    }
+
+    // NON-MATCHING parsing (PG, True/False, Uraian)
     const numberAnswerMatch = line.match(/^(\d+)[.)]\s*ANS\s*[:.-]?\s*([A-Za-z0-9]+)/i);
     if (numberAnswerMatch) {
+      saveCurrentQuestion();
       const qNum = parseInt(numberAnswerMatch[1]);
       let ansVal = numberAnswerMatch[2].toUpperCase();
       if (currentType === 'TRUE_FALSE') {
         if (ansVal === 'T' || ansVal === 'TRUE' || ansVal === 'BENAR' || ansVal === 'A') ansVal = 'A';
         else if (ansVal === 'F' || ansVal === 'FALSE' || ansVal === 'SALAH' || ansVal === 'S' || ansVal === 'B') ansVal = 'B';
       }
-      const targetQ = questions.slice().reverse().find(q => q.number === qNum && q.type === currentType) ||
-                      (currentQuestion && currentQuestion.number === qNum ? currentQuestion : null);
+      const targetQ = questions.slice().reverse().find(q => q.number === qNum && q.type === currentType);
       if (targetQ) {
         targetQ.answer = ansVal;
       }
       continue;
-    }
-
-    // In matching mode, if we see new choices or context pool before questions
-    if (currentType === 'MATCHING') {
-      const choiceMatch = line.match(/^([a-z])[.)]\s+(.+)$/i);
-      if (choiceMatch && (!currentQuestion || currentState !== 'question')) {
-        const letter = choiceMatch[1].toLowerCase();
-        if (letter === 'a') {
-          activeMatchingChoices = {};
-        }
-        activeMatchingChoices[letter] = choiceMatch[2];
-        continue;
-      }
     }
     
     // Detect question number — also handles ExamView Test format "____ 1. text"
@@ -157,8 +253,7 @@ export function parseTextToQuestions(text: string): ParseResult {
         currentQuestion = {
           number: detectedNumber,
           text: questionMatch[2],
-          options: currentType === 'MATCHING' ? { ...activeMatchingChoices } :
-                   currentType === 'TRUE_FALSE' ? { a: 'Benar', b: 'Salah' } :
+          options: currentType === 'TRUE_FALSE' ? { a: 'Benar', b: 'Salah' } :
                    { a: '', b: '', c: '', d: '' },
           answer: '',
           type: currentType
@@ -220,19 +315,6 @@ export function parseTextToQuestions(text: string): ParseResult {
       }
       continue;
     }
-
-    // In matching mode, if new choices appear between groups
-    if (currentType === 'MATCHING') {
-      const choiceMatch = line.match(/^([a-z])[.)]\s+(.+)$/i);
-      if (choiceMatch) {
-        const letter = choiceMatch[1].toLowerCase();
-        if (letter === 'a') {
-          activeMatchingChoices = {};
-        }
-        activeMatchingChoices[letter] = choiceMatch[2];
-        continue;
-      }
-    }
     
     // For PG, detect options
     const optionMatch = line.match(/^([a-eA-E])[.)]\s+(.+)$/);
@@ -277,6 +359,7 @@ export function parseTextToQuestions(text: string): ParseResult {
   
   // Save last question
   saveCurrentQuestion();
+  saveCurrentMatchingGroup();
 
   // Phase 2: Parse Answer Key section and merge answers
   // Debug: show lines that might contain answer section
@@ -336,6 +419,8 @@ function finalizeQuestion(q: Partial<Question>): Question {
     options: defaultOptions,
     answer: q.answer || '',
     type,
+    ...(q.stimulus ? { stimulus: q.stimulus } : {}),
+    ...(q.matchingPairs ? { matchingPairs: q.matchingPairs } : {}),
     ...(q.images ? { images: q.images } : {})
   };
 }
@@ -774,7 +859,7 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
     // Clean multiple [GAMBAR] markers into one
     line = line.replace(/(\[GAMBAR\]\s*)+/g, '[GAMBAR] ');
     
-    const markerRegex = /^(ANS|ANSWER|JAWABAN|KUNCI|MULTIPLE|PILIHAN|ESSAY|URAIAN|SHORT|TRUE|BENAR|MATCHING|MENJODOHKAN|MENCOCOKKAN|MENCOCOKAN|B[\s/-]*S|PTS|\[IMG_|\[GAMBAR)/i;
+    const markerRegex = /^(ANS|ANSWER|JAWABAN|KUNCI|MULTIPLE|PILIHAN|ESSAY|URAIAN|SHORT|TRUE|BENAR|MATCHING|MENJODOHKAN|MENCOCOKKAN|MENCOCOKAN|B[\s/-]*S|PTS|\d+[.)]\s*ANS|\[IMG_|\[GAMBAR)/i;
 
     // If line is just "a." through "e." (or "a)" etc), merge with ALL following
     // continuation lines until we hit another pattern (option, question, marker)
@@ -821,6 +906,7 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
       const isMarker = markerRegex.test(line);
       const prevIsOrphanOption = /^[a-eA-E][.)]$/.test(prevLine);
       const prevIsOrphanQuestion = /^\d+[.)]$/.test(prevLine);
+      const prevIsMarker = markerRegex.test(prevLine) || /PTS\s*[:.-]?\s*\d+/i.test(prevLine);
       
       // If previous line is an orphan question number, merge current line into it
       if (prevIsOrphanQuestion && !isQuestionStart && !isMarker) {
@@ -829,10 +915,10 @@ export function parseRTF(rtfText: string): { text: string; images: ExtractedImag
       }
       
       // If current line doesn't start with any known pattern, it's a continuation
-      if (!isOptionStart && !isQuestionStart && !isMarker && !prevIsOrphanOption) {
+      if (!isOptionStart && !isQuestionStart && !isMarker && !prevIsOrphanOption && !prevIsMarker) {
         // Check if previous line looks like it was cut mid-sentence
         const prevEndsClean = /[.?!:;,\)]$/.test(prevLine);
-        if (!prevEndsClean && prevLine.length > 0 && !markerRegex.test(prevLine)) {
+        if (!prevEndsClean && prevLine.length > 0) {
           cleanLines[cleanLines.length - 1] = prevLine + ' ' + line;
           continue;
         }

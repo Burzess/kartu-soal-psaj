@@ -279,20 +279,15 @@ export default function KunciJawaban({ questions, examType, metadata, skorPerSoa
                 </tr>
               </thead>
               <tbody>
-                {matchingQuestions.map((q) => {
-                  const keyLetter = (q.answer || '').toLowerCase();
-                  const matchedText = q.options?.[keyLetter] || '';
-                  return (
-                    <tr key={q.number} style={{ backgroundColor: '#ffffff' }}>
-                      <td className="border border-black p-4 text-center">{q.number}</td>
-                      <td className="border border-black p-4 text-justify">
-                        <span className="font-bold">{q.answer?.toUpperCase()}.</span>{' '}
-                        {renderTextWithImages(matchedText || q.answer, images)}
-                      </td>
-                      <td className="border border-black p-4 text-center">{actualSkorObj}</td>
-                    </tr>
-                  );
-                })}
+                {matchingQuestions.map((q) => (
+                  <tr key={q.number} style={{ backgroundColor: '#ffffff' }}>
+                    <td className="border border-black p-4 text-center">{q.number}</td>
+                    <td className="border border-black p-4 text-center font-bold">
+                      {q.answer?.toUpperCase() || '-'}
+                    </td>
+                    <td className="border border-black p-4 text-center">{actualSkorObj}</td>
+                  </tr>
+                ))}
                 <tr className="font-bold" style={{ backgroundColor: '#f0f0f0' }}>
                   <td className="border border-black p-4 text-center" colSpan={2}>Total Skor</td>
                   <td className="border border-black p-4 text-center">{totalSkorMatching}</td>

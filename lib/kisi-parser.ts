@@ -159,8 +159,45 @@ function findColumnMapping(headers: string[]): ColumnMapping {
     // Column 7: Level Kognitif
     level: findCol(['LEVEL KOGNITIF', 'LEVEL', 'KOGNITIF', 'TINGKAT', 'L1', 'L2', 'L3']),
     // Column 8: Bentuk Soal
-    bentuk: findCol(['BENTUK SOAL', 'BENTUK', 'JENIS', 'TIPE'])
+    bentuk: findCol(['BENTUK SOAL', 'BENTUK TES', 'BENTUK', 'JENIS SOAL', 'JENIS', 'TIPE SOAL', 'TIPE', 'BENTUK/JENIS', 'BENTUK / JENIS', 'FORMAT SOAL', 'FORMAT'])
   };
+}
+
+/**
+ * Normalize bentuk soal string to internal question type
+ * Defaults to 'PG' if empty or not recognized as True/False, Matching, or Essay
+ */
+export function normalizeBentukSoal(bentuk?: string | null): 'PG' | 'TRUE_FALSE' | 'MATCHING' | 'URAIAN' {
+  if (!bentuk || typeof bentuk !== 'string') return 'PG';
+  const b = bentuk.toLowerCase().trim().replace(/[\s\-_/]+/g, ' ');
+  if (!b) return 'PG';
+
+  if (
+    b.includes('benar') ||
+    b.includes('salah') ||
+    b.includes('true') ||
+    b.includes('false') ||
+    b.includes('b s') ||
+    b === 'bs'
+  ) {
+    return 'TRUE_FALSE';
+  }
+  if (
+    b.includes('jodoh') ||
+    b.includes('match') ||
+    b.includes('cocok')
+  ) {
+    return 'MATCHING';
+  }
+  if (
+    b.includes('uraian') ||
+    b.includes('essay') ||
+    b.includes('isian') ||
+    b.includes('short')
+  ) {
+    return 'URAIAN';
+  }
+  return 'PG';
 }
 
 function findHeaderRowAndMapping(jsonData: unknown[][]): {

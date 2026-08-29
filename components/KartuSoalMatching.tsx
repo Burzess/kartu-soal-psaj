@@ -119,11 +119,7 @@ export default function KartuSoalMatching({ question, metadata, images, kisiKisi
     .filter(([, val]) => val && val.trim() !== '')
     .sort(([a], [b]) => a.localeCompare(b));
 
-  const answerKey = (question.answer || '').toLowerCase();
-  const matchedText = question.options?.[answerKey] || '';
-  const answerDisplay = matchedText
-    ? `${question.answer.toUpperCase()}. ${matchedText}`
-    : question.answer || '-';
+  const answerDisplay = (question.answer || '-').toUpperCase();
 
   const kelasDanUjian = metadata?.kelasUjian ? `${metadata.kelasUjian} / ${examType}` : '-';
 
@@ -192,14 +188,33 @@ export default function KartuSoalMatching({ question, metadata, images, kisiKisi
 
             <div className="border border-black">
               <div className="bg-[#c8c8c8] font-bold border-b border-black h-[28px] flex items-center justify-center">Rumusan Butir Soal</div>
-              <div className="bg-[#8eb7df] p-2 min-h-47.5 align-top whitespace-pre-wrap wrap-break-word">{renderTextWithImages(question.text, images)}</div>
+              <div className="bg-[#8eb7df] p-2 min-h-47.5 align-top whitespace-pre-wrap wrap-break-word space-y-2">
+                {question.stimulus && (
+                  <div className="pb-2 border-b border-black/30">
+                    {renderTextWithImages(question.stimulus, images)}
+                  </div>
+                )}
+                <div>{renderTextWithImages(question.text, images)}</div>
+              </div>
             </div>
           </div>
 
           <div className="grid grid-cols-[28%_72%] gap-2">
             <div className="border border-black">
               <div className="bg-[#c8c8c8] font-bold border-b border-black h-[28px] flex items-center justify-center">Kunci Pasangan</div>
-              <div className="bg-[#fff200] p-2 text-center min-h-38.5 flex items-center justify-center font-bold text-[13px]">{answerDisplay}</div>
+              <div className="bg-[#fff200] p-2 text-center min-h-38.5 flex flex-col items-center justify-center font-bold text-[13px] space-y-1">
+                {question.matchingPairs && question.matchingPairs.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-1 text-center w-full">
+                    {question.matchingPairs.map(p => (
+                      <div key={p.subNumber} className="text-[12px]">
+                        <span className="font-semibold">No. {p.subNumber}</span> &rarr; <span className="font-bold text-[13px]">{p.answer || '-'}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-[16px]">{answerDisplay}</span>
+                )}
+              </div>
             </div>
 
             <div className="border border-black">
