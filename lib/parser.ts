@@ -47,11 +47,13 @@ export function parseTextToQuestions(text: string): ParseResult {
   let currentType: Question['type'] = 'PG';
 
   let matchingGroupCount = 0;
+  let matchingState: 'stimulus' | 'options' | 'premises' | 'answers' = 'stimulus';
   let currentMatchingGroup: {
     number: number;
     stimulus: string;
     options: Record<string, string>;
     pairs: MatchingPair[];
+    lastOptionLetter?: string;
   } | null = null;
 
   let inQuestionSubList = false;
@@ -97,6 +99,7 @@ export function parseTextToQuestions(text: string): ParseResult {
       questions.push(q);
     }
     currentMatchingGroup = null;
+    matchingState = 'stimulus';
   };
   
   for (let i = 0; i < parseEndIndex; i++) {
@@ -133,13 +136,15 @@ export function parseTextToQuestions(text: string): ParseResult {
       currentType = 'MATCHING';
       currentState = 'question';
       matchingGroupCount = 0;
+      matchingState = 'stimulus';
       continue;
     }
 
-    // MATCHING parsing mode (Unified per stimulus group)
+    // MATCHING parsing mode (Robust state machine)
     if (currentType === 'MATCHING') {
       const numberAnswerMatch = line.match(/^(\d+)[.)]\s*ANS\s*[:.-]?\s*([A-Za-z0-9]+)/i);
       if (numberAnswerMatch) {
+        matchingState = 'answers';
         const subNum = parseInt(numberAnswerMatch[1]);
         const ansVal = numberAnswerMatch[2].toUpperCase();
         if (currentMatchingGroup) {
@@ -154,29 +159,45 @@ export function parseTextToQuestions(text: string): ParseResult {
       const choiceMatch = line.match(/^([a-z])[.)]\s+(.+)$/i);
       if (choiceMatch) {
         const letter = choiceMatch[1].toLowerCase();
+        
+        // If we see choice 'a' and already had pairs or completed answers, finalize previous matching group
         if (letter === 'a') {
-          if (currentMatchingGroup && currentMatchingGroup.pairs.length > 0) {
+          if (currentMatchingGroup && (currentMatchingGroup.pairs.length > 0 || matchingState === 'answers')) {
             saveCurrentMatchingGroup();
           }
-          if (!currentMatchingGroup) {
-            matchingGroupCount++;
-            currentMatchingGroup = {
-              number: matchingGroupCount,
-              stimulus: '',
-              options: {},
-              pairs: []
-            };
-          }
         }
-        if (currentMatchingGroup) {
-          currentMatchingGroup.options[letter] = choiceMatch[2];
+
+        if (!currentMatchingGroup) {
+          matchingGroupCount++;
+          currentMatchingGroup = {
+            number: matchingGroupCount,
+            stimulus: '',
+            options: {},
+            pairs: []
+          };
         }
+
+        matchingState = 'options';
+        currentMatchingGroup.options[letter] = choiceMatch[2];
+        currentMatchingGroup.lastOptionLetter = letter;
         continue;
       }
 
       const cleanedLine = line.replace(/^_+\s*/, '');
       const itemMatch = cleanedLine.match(/^(\d+)[.)]\s+(.+)$/);
-      if (itemMatch) {
+      if (itemMatch && matchingState !== 'stimulus') {
+        // If we were in answers state and see a new premise number, save previous group
+        if (matchingState === 'answers') {
+          saveCurrentMatchingGroup();
+          matchingGroupCount++;
+          currentMatchingGroup = {
+            number: matchingGroupCount,
+            stimulus: '',
+            options: {},
+            pairs: []
+          };
+        }
+
         const subNumber = parseInt(itemMatch[1]);
         const premiseText = itemMatch[2];
         if (!currentMatchingGroup) {
@@ -188,6 +209,8 @@ export function parseTextToQuestions(text: string): ParseResult {
             pairs: []
           };
         }
+
+        matchingState = 'premises';
         currentMatchingGroup.pairs.push({
           subNumber,
           premise: premiseText,
@@ -196,10 +219,35 @@ export function parseTextToQuestions(text: string): ParseResult {
         continue;
       }
 
-      // Stimulus / context line for matching group
-      if (currentMatchingGroup && currentMatchingGroup.pairs.length > 0) {
+      // If we finished answers and encounter new text (not answer), start new group with stimulus
+      if (matchingState === 'answers') {
         saveCurrentMatchingGroup();
+        matchingGroupCount++;
+        currentMatchingGroup = {
+          number: matchingGroupCount,
+          stimulus: line,
+          options: {},
+          pairs: []
+        };
+        matchingState = 'stimulus';
+        continue;
       }
+
+      // If currently in premises, non-matching lines are premise multiline continuation
+      if (matchingState === 'premises' && currentMatchingGroup && currentMatchingGroup.pairs.length > 0) {
+        const lastPair = currentMatchingGroup.pairs[currentMatchingGroup.pairs.length - 1];
+        lastPair.premise = `${lastPair.premise} ${line}`.trim();
+        continue;
+      }
+
+      // If currently in options, non-matching lines are option multiline continuation
+      if (matchingState === 'options' && currentMatchingGroup && currentMatchingGroup.lastOptionLetter) {
+        currentMatchingGroup.options[currentMatchingGroup.lastOptionLetter] = 
+          `${currentMatchingGroup.options[currentMatchingGroup.lastOptionLetter]} ${line}`.trim();
+        continue;
+      }
+
+      // Otherwise, line belongs to stimulus (even if it contains numbers like "5-kecepatan")
       if (!currentMatchingGroup) {
         matchingGroupCount++;
         currentMatchingGroup = {
@@ -210,6 +258,7 @@ export function parseTextToQuestions(text: string): ParseResult {
         };
       }
       currentMatchingGroup.stimulus = (currentMatchingGroup.stimulus ? currentMatchingGroup.stimulus + '\n' : '') + line;
+      matchingState = 'stimulus';
       continue;
     }
 
