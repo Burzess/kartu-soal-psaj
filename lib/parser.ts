@@ -54,6 +54,8 @@ export function parseTextToQuestions(text: string): ParseResult {
     pairs: MatchingPair[];
   } | null = null;
 
+  let inQuestionSubList = false;
+
   const answerKeyStartIndex = lines.findIndex(l => 
     /^(ANSWER\s*KEY|ANSWER\s*SECTION|KUNCI\s*JAWABAN)/i.test(l) ||
     /Answer\s*Section/i.test(l)
@@ -70,6 +72,7 @@ export function parseTextToQuestions(text: string): ParseResult {
       }
     }
     currentQuestion = null;
+    inQuestionSubList = false;
   };
 
   const saveCurrentMatchingGroup = () => {
@@ -227,6 +230,17 @@ export function parseTextToQuestions(text: string): ParseResult {
       continue;
     }
     
+    // For PG, detect options first
+    const optionMatch = line.match(/^([a-eA-E])[.)]\s+(.+)$/);
+    if (optionMatch && currentQuestion && currentType === 'PG') {
+      const optLetter = optionMatch[1].toLowerCase();
+      currentQuestion.options = currentQuestion.options || { a: '', b: '', c: '', d: '' };
+      currentQuestion.options[optLetter as 'a' | 'b' | 'c' | 'd' | 'e'] = optionMatch[2];
+      currentState = 'options';
+      inQuestionSubList = false;
+      continue;
+    }
+
     // Detect question number — also handles ExamView Test format "____ 1. text"
     const cleanedLine = line.replace(/^_+\s*/, '');
     const questionMatch = cleanedLine.match(/^(\d+)[.)]\s+(.+)$/);
@@ -234,19 +248,27 @@ export function parseTextToQuestions(text: string): ParseResult {
       const detectedNumber = parseInt(questionMatch[1]);
       const usesParenSeparator = cleanedLine.charAt(questionMatch[1].length) === ')';
 
-      // Heuristic: if the current question has text but no options yet,
-      // and the numbered line uses ")" as separator (e.g. "1) mengajak...", "2) memilih..."),
-      // treat it as a sub-item within the question body, not a new question.
-      const isLikelySubItem = currentQuestion &&
-        currentState === 'question' &&
-        currentQuestion.text &&
-        usesParenSeparator &&
-        currentType === 'PG' &&
-        currentQuestion.options &&
-        !currentQuestion.options.a &&
-        !currentQuestion.options.b;
+      // Check whether this numbered line is a sub-item inside question stem rather than a new question
+      let isSubItem = false;
+      if (currentQuestion && currentState === 'question' && currentQuestion.text) {
+        const currentQNum = currentQuestion.number || 0;
+        if (currentType === 'PG') {
+          // For PG: a question MUST have options. Before options are found, any numbered line is part of stimulus.
+          // Also if detectedNumber <= currentQuestion.number (e.g. Q29 has 1., 2., 3.), it's a sub-item.
+          isSubItem = (!currentQuestion.options?.a && !currentQuestion.options?.b) || (currentQNum > 0 && detectedNumber <= currentQNum) || usesParenSeparator;
+        } else if (currentType === 'URAIAN') {
+          if ((currentQNum > 0 && detectedNumber <= currentQNum) || inQuestionSubList || usesParenSeparator) {
+            isSubItem = true;
+            inQuestionSubList = true;
+          }
+        } else if (currentType === 'TRUE_FALSE') {
+          if ((currentQNum > 0 && detectedNumber <= currentQNum) || usesParenSeparator) {
+            isSubItem = true;
+          }
+        }
+      }
 
-      if (!isLikelySubItem) {
+      if (!isSubItem) {
         saveCurrentQuestion();
 
         // Start new question
@@ -259,6 +281,7 @@ export function parseTextToQuestions(text: string): ParseResult {
           type: currentType
         };
         currentState = 'question';
+        inQuestionSubList = false;
         continue;
       }
 
@@ -283,6 +306,7 @@ export function parseTextToQuestions(text: string): ParseResult {
           currentQuestion.answer = firstAnswerLine;
         }
         currentState = 'answer';
+        inQuestionSubList = false;
         continue;
       }
       
@@ -316,16 +340,6 @@ export function parseTextToQuestions(text: string): ParseResult {
       continue;
     }
     
-    // For PG, detect options
-    const optionMatch = line.match(/^([a-eA-E])[.)]\s+(.+)$/);
-    if (optionMatch && currentQuestion && currentType === 'PG') {
-      const optLetter = optionMatch[1].toLowerCase();
-      currentQuestion.options = currentQuestion.options || { a: '', b: '', c: '', d: '' };
-      currentQuestion.options[optLetter as 'a' | 'b' | 'c' | 'd' | 'e'] = optionMatch[2];
-      currentState = 'options';
-      continue;
-    }
-    
     // Detect answer key - flexible format
     const answerMatch = line.match(/^(ANS|ANSWER|JAWABAN|KUNCI)\s*[:.-]?\s*([A-Za-z0-9]+)(\s|$)/i);
     if (answerMatch && currentQuestion) {
@@ -336,6 +350,7 @@ export function parseTextToQuestions(text: string): ParseResult {
       }
       currentQuestion.answer = rawAns;
       currentState = 'answer';
+      inQuestionSubList = false;
       continue;
     }
     
